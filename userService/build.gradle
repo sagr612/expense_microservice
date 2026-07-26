@@ -1,0 +1,89 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.5'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'sagar'
+version = '0.0.1-SNAPSHOT'
+description = 'Demo project for Spring Boot'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+ext {
+    set('springCloudVersion', "2025.0.0")
+}
+
+
+dependencies {
+    // Core
+    implementation 'org.springframework.boot:spring-boot-starter'
+    // For REST controllers (uncomment if you need web APIs)
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    testRuntimeOnly 'com.h2database:h2'
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+//    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
+//    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
+    // Source: https://mvnrepository.com/artifact/org.redisson/redisson
+    implementation("org.redisson:redisson:3.52.0")
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+
+    // Data + DB
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'org.postgresql:postgresql'  // version managed by Spring Boot
+
+    // Kafka
+    implementation 'org.springframework.kafka:spring-kafka'
+    implementation 'com.cloudinary:cloudinary-http5:2.0.0'
+    implementation 'com.cloudinary:cloudinary-taglib:2.0.0'
+    implementation 'io.github.cdimascio:dotenv-java:2.2.4'
+    // Lombok (compile-time only)
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testCompileOnly 'org.projectlombok:lombok'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+
+    // Testing
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+
+    // Testcontainers — only needed if you want the integration test
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation platform('org.testcontainers:testcontainers-bom:2.0.5')
+
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}

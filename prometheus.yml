@@ -1,0 +1,34 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+
+  - job_name: gateway
+    static_configs:
+      - targets: ['host.docker.internal:8080']
+    metrics_path: /actuator/prometheus
+
+  - job_name: auth-service
+    static_configs:
+      - targets: ['host.docker.internal:9898']
+    metrics_path: /actuator/prometheus
+
+  - job_name: user-service
+    static_configs:
+      - targets: ['host.docker.internal:9001']
+    metrics_path: /actuator/prometheus
+
+  - job_name: expense-service
+    static_configs:
+      - targets: ['host.docker.internal:9810']
+    metrics_path: /actuator/prometheus
+
+  - job_name: notification-service
+    static_configs:
+      - targets: ['host.docker.internal:9500']
+    metrics_path: /actuator/prometheus
+
+  - job_name: ai-service
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: /metrics

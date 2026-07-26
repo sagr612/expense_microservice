@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <conversionRule
+            conversionWord="clr"
+            class="org.springframework.boot.logging.logback.ColorConverter"/>
+
+    <!-- ── Console appender ── -->
+    <appender name="CONSOLE"
+              class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>
+                %clr(%d{yyyy-MM-dd HH:mm:ss.SSS}){faint} %clr([%15.15t]){faint} %clr(%-5p) %clr([${spring.application.name:-app}]){magenta} %clr([%X{traceId:-no-trace}/%X{spanId:-no-span}]){yellow} %clr(%-40.40logger{39}){cyan} : %m%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── File appender ── -->
+    <appender name="FILE"
+              class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/${spring.application.name:-app}.log</file>
+        <rollingPolicy
+                class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>
+                logs/${spring.application.name:-app}.%d{yyyy-MM-dd}.log
+            </fileNamePattern>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>
+                %d{yyyy-MM-dd HH:mm:ss.SSS} [%t] %-5p [${spring.application.name:-app}] [%X{traceId:-no-trace}/%X{spanId:-no-span}] %-40.40logger{39} : %m%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!-- ── Noise reduction ── -->
+    <logger name="org.apache.kafka"             level="WARN"/>
+    <logger name="org.springframework.kafka"    level="WARN"/>
+    <logger name="org.hibernate.SQL"            level="DEBUG"/>
+    <logger name="org.springframework.security" level="WARN"/>
+    <logger name="eureka"                       level="WARN"/>
+    <logger name="com.netflix"                  level="WARN"/>
+
+    <!-- ── Root — BOTH appenders referenced here ── -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="FILE"/>    <!-- ← this line was missing -->
+    </root>
+
+</configuration>

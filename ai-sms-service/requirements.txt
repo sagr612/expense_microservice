@@ -1,0 +1,14 @@
+# requirements.txt
+fastapi
+uvicorn[standard]
+google-genai
+kafka-python
+pydantic
+python-dotenv
+prometheus-fastapi-instrumentator
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-jaeger
+opentelemetry-exporter-zipkin-json
+py-eureka-client

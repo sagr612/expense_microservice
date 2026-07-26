@@ -1,0 +1,91 @@
+spring:
+  application:
+    name: user-service
+
+  profiles:
+    active: dev
+
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:userservice}
+    username: ${POSTGRES_USER:postgres}
+    password: ${POSTGRES_PASSWORD:123}
+
+  jpa:
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+
+
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:${KAFKA_PORT:9092}
+    topic-user-deleted:
+      name: user.deleted
+    listener:
+      observation-enabled: true
+    producer:
+      observation-enabled: true
+    consumer:
+      group-id: userinfo-consumer-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: sagar.userService.deserializer.UserInfoDeserializer
+      auto-offset-reset: earliest
+
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: sagar.userService.dtos
+            type:
+              mapping: auth:sagar.userService.dtos.UserInfoDto
+
+    topic-json:
+      name: user_service
+
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+
+server:
+  port: 9001
+
+logging:
+  level:
+    org.springframework.security: DEBUG
+    sagar.userService: DEBUG
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+
+cloudinary:
+  cloud-name: ${CLOUDINARY_CLOUD_NAME}
+  api-key: ${CLOUDINARY_API_KEY}
+  api-secret: ${CLOUDINARY_API_SECRET}
+  url: ${CLOUDINARY_URL}
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    tags:
+      application: ${spring.application.name}
+
+  tracing:
+    sampling:
+      probability: 1.0
+  zipkin:
+    tracing:
+      endpoint: http://localhost:9411/api/v2/spans
+
