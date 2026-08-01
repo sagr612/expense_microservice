@@ -25,13 +25,10 @@ public interface ExpenseRepository extends JpaRepository<Expense, String>, JpaSp
 
     Page<Expense> findByUserId(String userId, Pageable pageable);
 
-    List<Expense> findByUserId(String userId);
 
     Optional<Expense> findByUserIdAndExternalId(String userId, String externalId);
 
-//    Optional<Expense> existsByUserIdAndExternalId(String userId, String externalId);
 
-    List<Expense> findByUserIdAndCreatedAtBetween(String userId, Instant start, Instant end);
 
 
     Long countByUserId(String userId);
@@ -94,8 +91,8 @@ public interface ExpenseRepository extends JpaRepository<Expense, String>, JpaSp
             WHERE e.userId = :userId
             AND e.category = :category
             AND e.type = 'EXPENSE'
-            AND EXTRACT(MONTH FROM e.createdAt) = :month
-            AND EXTRACT(YEAR FROM e.createdAt) = :year
+            AND EXTRACT(MONTH FROM e.transactionDate) = :month
+            AND EXTRACT(YEAR FROM e.transactionDate) = :year
             """)
     BigDecimal getSpentAmount(
             String userId,

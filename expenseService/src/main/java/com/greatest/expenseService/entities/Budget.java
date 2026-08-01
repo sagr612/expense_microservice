@@ -12,8 +12,8 @@ import java.math.BigDecimal;
                         columnNames = {
                                 "userId",
                                 "category",
-                                "month",
-                                "year"
+                                "budget_month",
+                                "budget_year"
                         }
                 )
         }
@@ -33,9 +33,9 @@ public class Budget {
 
     @Enumerated(EnumType.STRING)
     private CategoryType category;
-
+    @Column(name = "budget_month", nullable = false)
     private Integer month;
-
+    @Column(name = "budget_year", nullable = false)
     private Integer year;
 
     private BigDecimal amount;

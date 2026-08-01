@@ -14,6 +14,7 @@ import org.apache.logging.log4j.util.Strings;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -98,12 +99,28 @@ public class ExpenseService {
     public ExpenseDto updateExpense(ExpenseDto req) {
         log.info("Updating expense - userId: {}, externalId: {}", req.getUserId(), req.getExternalId());
 
-        validateExpenseDto(req);
-
+//        validateExpenseDto(req);
+        if (Strings.isBlank(req.getExternalId())) {
+            throw new IllegalArgumentException("ExternalId is empty");
+        }
+        if (Strings.isBlank(req.getUserId())) {
+            throw new IllegalArgumentException("UserId is empty");
+        }
         Expense expense = expenseRepository
                 .findByUserIdAndExternalId(req.getUserId(), req.getExternalId())
                 .orElseThrow(() -> new IllegalArgumentException("Expense not found"));
+        boolean nothingToUpdate =
+                req.getAmount() == null &&
+                        Strings.isBlank(req.getCurrency()) &&
+                        req.getType() == null &&
+                        req.getCategory() == null &&
+                        Strings.isBlank(req.getTitle()) &&
+                        Strings.isBlank(req.getNote()) &&
+                        req.getTransactionDate() == null;
 
+        if (nothingToUpdate) {
+            throw new IllegalArgumentException("No fields provided to update");
+        }
         if (req.getAmount() != null) {
             expense.setAmount(req.getAmount());
         }
@@ -124,7 +141,7 @@ public class ExpenseService {
         if (Strings.isNotBlank(req.getNote())) {
             expense.setNote(req.getNote());
         }
-        if(req.getTransactionDate()!=null){
+        if (req.getTransactionDate() != null) {
             expense.setTransactionDate(req.getTransactionDate());
         }
         Expense updated = expenseRepository.save(expense);
@@ -142,7 +159,7 @@ public class ExpenseService {
                 .findByUserIdAndExternalId(userId, externalId)
                 .orElseThrow(() -> new IllegalArgumentException("Expense not found"));
 
-        expenseRepository.delete(expense);
+        ((JpaRepository<Expense, String>) expenseRepository).delete(expense);
         log.info("Expense deleted - id: {}", expense.getId());
     }
 

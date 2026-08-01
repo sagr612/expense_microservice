@@ -32,13 +32,12 @@ public class Expense {
 
     @Version
     private Long version;
-//    @Column(nullable = false)
+    @Column(nullable = false)
     private LocalDate transactionDate;
-//    @Column(nullable = false, length = 100)
-    @Column(unique = true)
+    @Column(nullable = false, unique = true)
     private String externalId;
 
-//    @Column(nullable = false)
+    @Column(nullable = false)
     private String userId;
 
     @Column(nullable = false, precision = 10, scale = 2)
