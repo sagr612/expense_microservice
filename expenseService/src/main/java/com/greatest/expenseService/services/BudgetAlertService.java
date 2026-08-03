@@ -28,6 +28,10 @@ public class BudgetAlertService {
 
     @Transactional
     public void checkBudget(Expense expense) {
+        if (expense.getTransactionDate() == null) {
+            log.warn("Skipping budget check because transactionDate is null");
+            return;
+        }
         int month = expense.getTransactionDate().getMonthValue();
         int year = expense.getTransactionDate().getYear();
 

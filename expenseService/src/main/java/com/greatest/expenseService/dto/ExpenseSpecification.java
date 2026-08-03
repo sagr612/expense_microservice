@@ -48,13 +48,13 @@ public class ExpenseSpecification {
         return (root, query, cb) ->
                 date == null
                         ? null
-                        : cb.greaterThanOrEqualTo(root.get("createdAt"), date);
+                        : cb.greaterThanOrEqualTo(root.get("transactionDate"), date);
     }
 
     public static Specification<Expense> toDate(LocalDate date) {
         return (root, query, cb) ->
                 date == null
                         ? null
-                        : cb.lessThanOrEqualTo(root.get("createdAt"), date);
+                        : cb.lessThanOrEqualTo(root.get("transactionDate"), date);
     }
 }

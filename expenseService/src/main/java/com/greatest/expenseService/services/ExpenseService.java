@@ -58,7 +58,11 @@ public class ExpenseService {
     @Transactional
     public ExpenseDto createExpense(ExpenseDto req) {
         log.info("Creating expense for userId: {}, externalId: {}", req.getUserId(), req.getExternalId());
+//        if ("FAIL_ME".equals(req.getExternalId())) {
+//            throw new RuntimeException("Simulated processing failure");
+//        }
 
+        validateExpenseDto(req);
         Optional<Expense> expense_exists = expenseRepository.findByUserIdAndExternalId(req.getUserId(), req.getExternalId());
         if (expense_exists.isPresent()) {
             return convert(expense_exists.get());
@@ -80,7 +84,15 @@ public class ExpenseService {
 
         Expense saved = expenseRepository.save(expense);
         log.info("Expense created - id: {}", saved.getId());
+        log.info("before budget check");
+//        try {
         budgetAlertService.checkBudget(saved);
+//        } catch (Exception e) {
+//            log.error("Budget check failed", e);
+//            throw e;
+//        }
+        log.info("After budget check");
+
         ExpenseCreatedEvent event =
                 ExpenseCreatedEvent.builder()
                         .userId(saved.getUserId())
@@ -189,9 +201,9 @@ public class ExpenseService {
         if (Strings.isBlank(dto.getUserId())) {
             throw new IllegalArgumentException("UserId cannot be blank");
         }
-        if (Strings.isBlank(dto.getExternalId())) {
-            throw new IllegalArgumentException("ExternalId cannot be blank");
-        }
+//        if (Strings.isBlank(dto.getExternalId())) {
+//            throw new IllegalArgumentException("ExternalId cannot be blank");
+//        }
         if (dto.getAmount() == null) {
             throw new IllegalArgumentException("Amount cannot be null");
         }
@@ -206,7 +218,9 @@ public class ExpenseService {
         if (dto.getTitle() == null) {
             throw new IllegalArgumentException("Title cannot be null");
         }
-
+        if (dto.getTransactionDate() == null) {
+            throw new IllegalArgumentException("Transaction date is required");
+        }
     }
 
     public ExpenseDto getExpense(@NonNull String userId, @NonNull String externalId) {
@@ -263,8 +277,7 @@ public class ExpenseService {
             LocalDate toDate,
             Pageable pageable) {
 
-        Specification<Expense> spec = Specification
-                .where(ExpenseSpecification.hasUserId(userId))
+        Specification<Expense> spec = ExpenseSpecification.hasUserId(userId)
                 .and(ExpenseSpecification.hasCategory(category))
                 .and(ExpenseSpecification.hasType(type))
                 .and(ExpenseSpecification.minAmount(minAmount))

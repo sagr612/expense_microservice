@@ -34,7 +34,7 @@ public class KafkaTestController {
      */
     @PostMapping("/publish/success")
     public String publishSuccess(@RequestBody ExpenseDto dto) {
-        kafkaTemplate.send("expense.created", dto.getExternalId(), dto);
+        kafkaTemplate.send("expense.create.request", dto.getExternalId(), dto);
         return "sent: " + dto.getExternalId();
     }
 

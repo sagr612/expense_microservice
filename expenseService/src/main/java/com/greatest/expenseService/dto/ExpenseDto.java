@@ -49,7 +49,7 @@ public class ExpenseDto {
 
     private String note;
 
-
+    @NotNull(message = "Transaction Date is required")
     private LocalDate transactionDate;
 
 
