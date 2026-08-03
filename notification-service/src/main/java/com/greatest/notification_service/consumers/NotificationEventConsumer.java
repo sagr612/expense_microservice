@@ -21,11 +21,7 @@ public class NotificationEventConsumer {
     private final NotificationService notificationService;
 
     // Listens to budget alerts from expenseService
-    @KafkaListener(
-            topics = "budget-alerts",
-            groupId = "notification-service-group",
-            containerFactory = "budgetAlertKafkaListenerContainerFactory"
-    )
+    @KafkaListener(topics = "budget-alerts", groupId = "notification-service-group", containerFactory = "budgetAlertKafkaListenerContainerFactory")
     public void handleBudgetAlert(BudgetAlertEvent event) {
         log.info("Budget alert received for userId: {}", event.getUserId());
 
