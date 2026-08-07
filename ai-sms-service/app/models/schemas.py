@@ -1,6 +1,6 @@
 # app/models/schemas.py
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 
 class SmsClassifyRequest(BaseModel):
     smsText: str
@@ -11,7 +11,12 @@ class SmsExpenseEvent(BaseModel):
     amount: float
     currency: str = "INR"
     type: str
-    category: str
+    category:  Literal[
+        "FOOD", "TRANSPORT", "SHOPPING", "BILLS",
+        "ENTERTAINMENT", "HEALTH",
+        "SALARY", "FREELANCE", "INVESTMENT", "GIFT",
+        "OTHERS",
+    ]
     title: str
     note: str
     transactionDate: str

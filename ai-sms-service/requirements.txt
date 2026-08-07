@@ -12,3 +12,6 @@ opentelemetry-instrumentation-fastapi
 opentelemetry-exporter-jaeger
 opentelemetry-exporter-zipkin-json
 py-eureka-client
+pytest
+pytest-mock
+httpx

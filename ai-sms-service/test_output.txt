@@ -1,0 +1,83 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.0, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\greatest\Work-dev\backend\expenseTracker\ai-sms-service\venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\greatest\Work-dev\backend\expenseTracker\ai-sms-service
+plugins: anyio-4.14.2, mock-3.15.1
+collecting ... collected 64 items
+
+tests/test_classifer.py::test_classify_expense PASSED                    [  1%]
+tests/test_classifer.py::test_classify_income PASSED                     [  3%]
+tests/test_classifer.py::test_classify_irrelevant PASSED                 [  4%]
+tests/test_classifer.py::test_invalid_label_defaults_to_irrelevant PASSED [  6%]
+tests/test_classifer.py::test_confidence_above_one PASSED                [  7%]
+tests/test_classifer.py::test_confidence_below_zero PASSED               [  9%]
+tests/test_classifer.py::test_gemini_exception PASSED                    [ 10%]
+tests/test_classifer.py::test_invalid_json PASSED                        [ 12%]
+tests/test_classifer.py::test_missing_confidence_field PASSED            [ 14%]
+tests/test_classifer.py::test_missing_label_field PASSED                 [ 15%]
+tests/test_classifer.py::test_empty_response_text PASSED                 [ 17%]
+tests/test_classifer.py::test_confidence_at_boundary_zero PASSED         [ 18%]
+tests/test_classifer.py::test_confidence_at_boundary_one PASSED          [ 20%]
+tests/test_classifer.py::test_confidence_nan PASSED                      [ 21%]
+tests/test_classifer.py::test_confidence_string_value PASSED             [ 23%]
+tests/test_main_api.py::test_health_returns_up PASSED                    [ 25%]
+tests/test_main_api.py::test_classify_irrelevant_returns_auto_created_false PASSED [ 26%]
+tests/test_main_api.py::test_classify_expense_no_amount_returns_auto_created_false PASSED [ 28%]
+tests/test_main_api.py::test_classify_expense_below_threshold_no_kafka_publish PASSED [ 29%]
+tests/test_main_api.py::test_classify_expense_above_threshold_publishes_kafka PASSED [ 31%]
+tests/test_main_api.py::test_classify_income_above_threshold_publishes_kafka PASSED [ 32%]
+tests/test_main_api.py::test_classify_external_id_is_deterministic PASSED [ 34%]
+tests/test_main_api.py::test_classify_external_id_differs_by_user PASSED [ 35%]
+tests/test_main_api.py::test_classify_missing_required_header_returns_422 PASSED [ 37%]
+tests/test_main_api.py::test_classify_invalid_payload_missing_sms_text PASSED [ 39%]
+tests/test_main_api.py::test_classify_invalid_payload_wrong_type PASSED  [ 40%]
+tests/test_producer.py::test_publish_expense_event_sends_with_user_key PASSED [ 42%]
+tests/test_producer.py::test_publish_expense_event_sends_different_user PASSED [ 43%]
+tests/test_regex_extractor.py::TestExtractAmount::test_extracts_amount_across_formats[Rs.500 debited from your account-500.0] PASSED [ 45%]
+tests/test_regex_extractor.py::TestExtractAmount::test_extracts_amount_across_formats[Rs 500 debited-500.0] PASSED [ 46%]
+tests/test_regex_extractor.py::TestExtractAmount::test_extracts_amount_across_formats[INR 1,234.50 credited-1234.5] PASSED [ 48%]
+tests/test_regex_extractor.py::TestExtractAmount::test_extracts_amount_across_formats[rs.99.99 spent at store-99.99] PASSED [ 50%]
+tests/test_regex_extractor.py::TestExtractAmount::test_extracts_amount_across_formats[INR2500 debited-2500.0] PASSED [ 51%]
+tests/test_regex_extractor.py::TestExtractAmount::test_returns_none_when_no_amount_present PASSED [ 53%]
+tests/test_regex_extractor.py::TestExtractAmount::test_returns_none_on_empty_string PASSED [ 54%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_extracts_merchant_from_vpa_format PASSED [ 56%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_vpa_pattern_takes_priority_over_at_to_from_pattern PASSED [ 57%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_extracts_merchant_after_at_keyword PASSED [ 59%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_extracts_merchant_after_to_keyword_with_via_terminator PASSED [ 60%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_extracts_merchant_after_from_keyword PASSED [ 62%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_returns_none_when_no_merchant_pattern_matches PASSED [ 64%]
+tests/test_regex_extractor.py::TestExtractMerchant::test_lowercase_merchant_name_does_not_match_at_to_from_pattern PASSED [ 65%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Order placed on Swiggy for dinner-FOOD] PASSED [ 67%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Your Zomato order is confirmed-FOOD] PASSED [ 68%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Uber trip completed, Rs.150 charged-TRANSPORT] PASSED [ 70%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Ola cab booking confirmed-TRANSPORT] PASSED [ 71%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Amazon order shipped-SHOPPING] PASSED [ 73%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Flipkart Big Billion Day sale-SHOPPING] PASSED [ 75%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Your Netflix subscription renewed-ENTERTAINMENT] PASSED [ 76%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Electricity bill payment received-UTILITIES] PASSED [ 78%]
+tests/test_regex_extractor.py::TestGuessCategory::test_matches_known_keywords_case_insensitively[Mobile recharge successful-UTILITIES] PASSED [ 79%]
+tests/test_regex_extractor.py::TestGuessCategory::test_defaults_to_other_when_no_keyword_matches PASSED [ 81%]
+tests/test_regex_extractor.py::TestGuessCategory::test_is_case_insensitive PASSED [ 82%]
+tests/test_schemas.py::test_sms_classify_request_valid PASSED            [ 84%]
+tests/test_schemas.py::test_sms_classify_request_missing_field PASSED    [ 85%]
+tests/test_schemas.py::test_sms_classify_request_empty_string PASSED     [ 87%]
+tests/test_schemas.py::test_sms_classify_request_wrong_type PASSED       [ 89%]
+tests/test_schemas.py::test_sms_expense_event_valid_with_defaults PASSED [ 90%]
+tests/test_schemas.py::test_sms_expense_event_missing_required_field PASSED [ 92%]
+tests/test_schemas.py::test_sms_expense_event_negative_amount PASSED     [ 93%]
+tests/test_schemas.py::test_sms_expense_event_custom_currency PASSED     [ 95%]
+tests/test_schemas.py::test_sms_classify_response_without_event PASSED   [ 96%]
+tests/test_schemas.py::test_sms_classify_response_with_event PASSED      [ 98%]
+tests/test_schemas.py::test_sms_classify_response_missing_required_field PASSED [100%]
+
+============================== warnings summary ===============================
+venv\Lib\site-packages\google\genai\types.py:42
+  C:\Users\greatest\Work-dev\backend\expenseTracker\ai-sms-service\venv\Lib\site-packages\google\genai\types.py:42: DeprecationWarning: '_UnionGenericAlias' is deprecated and slated for removal in Python 3.17
+    VersionedUnionType = Union[builtin_types.UnionType, _UnionGenericAlias]
+
+venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\greatest\Work-dev\backend\expenseTracker\ai-sms-service\venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 64 passed, 2 warnings in 3.42s ========================

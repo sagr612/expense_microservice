@@ -75,7 +75,11 @@ def classify(payload: SmsClassifyRequest, x_user_id: str = Header(...)):
         return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False)
 
     merchant = extract_merchant(payload.smsText)
-    category = guess_category(payload.smsText)
+    llm_category = result.get("category")
+    if llm_category and llm_category != "OTHERS":
+        category = llm_category
+    else:
+        category = guess_category(payload.smsText)
     external_id = "sms-" + hashlib.sha256(
         (x_user_id + payload.smsText).encode()
     ).hexdigest()[:16]

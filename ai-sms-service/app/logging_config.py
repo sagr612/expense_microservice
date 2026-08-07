@@ -4,9 +4,7 @@ from opentelemetry import trace
 
 
 class TraceContextFilter(logging.Filter):
-
     def filter(self, record):
-
         span = trace.get_current_span()
         ctx = span.get_span_context()
 
@@ -16,30 +14,20 @@ class TraceContextFilter(logging.Filter):
         else:
             record.trace_id = "-"
             record.span_id = "-"
-
         return True
     
 
 def configure_logging():
-
     handler = logging.StreamHandler()
-
     formatter = logging.Formatter(
         "%(asctime)s %(levelname)s "
         "[%(trace_id)s-%(span_id)s] "
         "%(name)s - %(message)s"
     )
-
     handler.setFormatter(formatter)
-
-    handler.addFilter(
-        TraceContextFilter()
-    )
+    handler.addFilter(TraceContextFilter() )
 
     root = logging.getLogger()
-
     root.handlers.clear()
-
     root.addHandler(handler)
-
     root.setLevel(logging.INFO)
