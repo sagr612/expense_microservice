@@ -27,49 +27,6 @@ eureka:
     prefer-ip-address: true
 
 
-
-#
-#management:
-#  endpoints:
-#    web:
-#      exposure:
-#        include: "*"
-#  prometheus:
-#    metrics:
-#      export:
-#        enabled: true
-#    tags:
-#      application: ${spring.application.name}
-#  endpoint:
-#    gateway:
-#      access: unrestricted
-#    web:
-#      exposure:
-#        include: health,info,metrics,prometheus
-#
-#  # UPDATED FOR SPRING BOOT 4.X OPENTELEMETRY
-#  tracing:
-#    enabled: true
-#    sampling:
-#      probability: 1.0
-#  otlp:
-#    tracing:
-#      endpoint: http://localhost:9411/v1/traces  # Zipkin natively accepts OpenTelemetry protocol strings here!
-#
-#
-#
-##         # shows up as the service name in Zipkin UI
-#management:
-#  endpoints:
-#    web:
-#      exposure:
-#        include: health,info,metrics,prometheus,circuitbreakers
-#  endpoint:
-#    health:
-#      show-details: always
-#  health:
-#    circuitbreakers:
-#      enabled: true
 management:
   endpoints:
     web:
@@ -105,63 +62,18 @@ management:
       endpoint: http://localhost:9411/v1/traces
 logging:
   level:
+    root: INFO
+    com.greatest.gateway: INFO
     org.springframework.cloud.gateway: DEBUG
-    org.springframework.data.redis: DEBUG
-    io.lettuce.core: DEBUG
-    org.springframework.cloud.gateway.filter.ratelimit: TRACE
+#    org.springframework.data.redis: DEBUG
+#    io.lettuce.core: DEBUG
+#    org.springframework.cloud.gateway.filter.ratelimit: TRACE
 
 jwt:
-  secret: /+lOUCWb0YrBbkNfHT4DAXjZ8Ejp1C0NlTwB0Jlq47c=
-  expiration: 3600000
-  refresh-expiration: 604800000
-#
-#resilience4j:
-#  circuitbreaker:
-#    configs:
-#      default:
-#        # How many calls to track in the sliding window
-#        sliding-window-size: 10
-#        # Minimum calls before calculating failure rate
-#        minimum-number-of-calls: 5
-#        # Open circuit when 50% of calls fail
-#        failure-rate-threshold: 50
-#        # Stay open for 10 seconds before trying again
-#        wait-duration-in-open-state: 10s
-#        # Allow 3 test calls in half-open state
-#        permitted-number-of-calls-in-half-open-state: 3
-#        # Automatically move from open to half-open
-#        automatic-transition-from-open-to-half-open-enabled: true
-#        # Also track slow calls as failures
-#        slow-call-duration-threshold: 3s
-#        slow-call-rate-threshold: 80
-#        # Register with actuator so state shows in /actuator/health
-#        register-health-indicator: true
-#
-#    instances:
-#      expense-service-cb:
-#        base-config: default
-#      auth-service-cb:
-#        base-config: default
-#      user-service-cb:
-##        base-config: default
-##        slow-call-duration-threshold: 30s
-#          timeout-duration: 30s
-#      notification-service-cb:
-#        base-config: default
-#      ai-service-cb:
-#        base-config: default
-#        # AI service is slower due to Gemini API — give it more time
-#        slow-call-duration-threshold: 10s
-#
-#  timelimiter:
-#    configs:
-#      default:
-#        # Cancel request if downstream takes longer than 5s
-#        timeout-duration: 5s
-#    instances:
-#      ai-service-cb:
-#        timeout-duration: 15s    # Gemini can be slow on free tier
-#
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:3600000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
 
 resilience4j:
   circuitbreaker:

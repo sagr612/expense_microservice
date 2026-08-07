@@ -50,7 +50,7 @@ server:
   address: 0.0.0.0
 
 jwt:
-  secret: /+lOUCWb0YrBbkNfHT4DAXjZ8Ejp1C0NlTwB0Jlq47c=
+  secret: 20MaUh0L0yju5vwCwMXySKjsqwhV+/D9BJvfkzaKGWM=
   expiration: 3600000
   refresh-expiration: 604800000
 

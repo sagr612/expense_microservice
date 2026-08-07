@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -14,68 +15,63 @@ import java.util.Map;
 @Slf4j
 public class FallbackController {
 
-    @RequestMapping("/fallback/expense")
+
+    private Mono<ResponseEntity<Map<String, Object>>> fallback(String service, String message) {
+        log.warn("Circuit open — {} unavailable", service);
+        return Mono.just(ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "service", service,
+                        "message", message,
+                        "timestamp", Instant.now().toString()
+                )));
+    }
+
+    private static final RequestMethod[] ALLOWED_METHODS = {
+            RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+            RequestMethod.DELETE, RequestMethod.PATCH
+    };
+
+    @RequestMapping(value = "/fallback/expense", method = {
+            RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+            RequestMethod.DELETE, RequestMethod.PATCH})
     public Mono<ResponseEntity<Map<String, Object>>> expenseFallback() {
-        log.warn("Circuit open — expense-service unavailable");
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "status", 503,
-                        "service", "expense-service",
-                        "message", "Expense service is temporarily unavailable. Please try again later.",
-                        "timestamp", Instant.now().toString()
-                )));
+        return fallback("expense-service", "Expense service is temporarily unavailable. Please try again later.");
     }
-
-    @RequestMapping("/fallback/auth")
+    @RequestMapping(
+            value = "/fallback/auth",
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+                    RequestMethod.DELETE, RequestMethod.PATCH}
+    )
     public Mono<ResponseEntity<Map<String, Object>>> authFallback() {
-        log.warn("Circuit open — auth-service unavailable");
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "status", 503,
-                        "service", "auth-service",
-                        "message", "Auth service is temporarily unavailable. Please try again later.",
-                        "timestamp", Instant.now().toString()
-                )));
+        return fallback("auth-service", "Auth service is temporarily unavailable. Please try again later.");
     }
 
-    @RequestMapping("/fallback/user")
+    @RequestMapping(
+            value = "/fallback/user",
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+                    RequestMethod.DELETE, RequestMethod.PATCH}
+    )
     public Mono<ResponseEntity<Map<String, Object>>> userFallback() {
-        log.warn("Circuit open — user-service unavailable");
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "status", 503,
-                        "service", "user-service",
-                        "message", "User service is temporarily unavailable. Please try again later.",
-                        "timestamp", Instant.now().toString()
-                )));
+        return fallback("user-service", "User service is temporarily unavailable. Please try again later.");
     }
 
-    @RequestMapping("/fallback/notification")
+    @RequestMapping(
+            value = "/fallback/notification",
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+                    RequestMethod.DELETE, RequestMethod.PATCH}
+    )
     public Mono<ResponseEntity<Map<String, Object>>> notificationFallback() {
-        log.warn("Circuit open — notification-service unavailable");
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "status", 503,
-                        "service", "notification-service",
-                        "message", "Notification service is temporarily unavailable.",
-                        "timestamp", Instant.now().toString()
-                )));
+        return fallback("notification-service", "Notification service is temporarily unavailable. Please try again later.");
     }
 
-    @RequestMapping("/fallback/ai")
+    @RequestMapping(
+            value = "/fallback/ai",
+            method = {RequestMethod.GET, RequestMethod.POST, RequestMethod.PUT,
+                    RequestMethod.DELETE, RequestMethod.PATCH}
+    )
+
     public Mono<ResponseEntity<Map<String, Object>>> aiFallback() {
-        log.warn("Circuit open — ai-service unavailable");
-        return Mono.just(ResponseEntity
-                .status(HttpStatus.SERVICE_UNAVAILABLE)
-                .body(Map.of(
-                        "status", 503,
-                        "service", "ai-service",
-                        "message", "SMS classification is temporarily unavailable. Please log expenses manually.",
-                        "timestamp", Instant.now().toString()
-                )));
+        return fallback("ai-service", "AI service is temporarily unavailable. Please try again later.");
     }
 }

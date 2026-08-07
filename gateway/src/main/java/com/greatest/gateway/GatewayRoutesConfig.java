@@ -1,6 +1,7 @@
 package com.greatest.gateway;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cloud.gateway.filter.ratelimit.RedisRateLimiter;
 import org.springframework.cloud.gateway.route.RouteLocator;
 import org.springframework.cloud.gateway.route.builder.RouteLocatorBuilder;
@@ -8,21 +9,37 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@RequiredArgsConstructor
 public class GatewayRoutesConfig {
     private final JwtAuthFilter jwtAuthFilter;
     private final UserKeyResolver keyResolver;
-    private final RedisRateLimiter redisRateLimiter;
+    private final RedisRateLimiter authRateLimiter;
+    private final RedisRateLimiter readRateLimiter;
+    private final RedisRateLimiter writeRateLimiter;
+    private final RedisRateLimiter aiRateLimiter;
 
+    public GatewayRoutesConfig(
+            JwtAuthFilter jwtAuthFilter,
+            UserKeyResolver keyResolver,
+            @Qualifier("authRateLimiter") RedisRateLimiter authRateLimiter,
+            @Qualifier("readRateLimiter") RedisRateLimiter readRateLimiter,
+            @Qualifier("writeRateLimiter") RedisRateLimiter writeRateLimiter,
+            @Qualifier("aiRateLimiter") RedisRateLimiter aiRateLimiter) {
+        this.jwtAuthFilter = jwtAuthFilter;
+        this.keyResolver = keyResolver;
+        this.authRateLimiter = authRateLimiter;
+        this.readRateLimiter = readRateLimiter;
+        this.writeRateLimiter = writeRateLimiter;
+        this.aiRateLimiter = aiRateLimiter;
+    }
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
         return builder.routes()
 
                 .route("auth-service", r -> r
                         .path("/auth/**").filters(f -> f.filter(jwtAuthFilter).requestRateLimiter(c -> {
-                            c.setRateLimiter(redisRateLimiter);
+                            c.setRateLimiter(authRateLimiter);
                             c.setKeyResolver(keyResolver);
-                        }).circuitBreaker(c->c.setName("auth-service-cb")
+                        }).circuitBreaker(c -> c.setName("auth-service-cb")
                                 .setFallbackUri("forward:/fallback/auth")))
                         .uri("lb://AUTH-SERVICE"))
 
@@ -30,7 +47,7 @@ public class GatewayRoutesConfig {
                         .path("/api/v1/users/**")
                         .filters(f -> f.filter(jwtAuthFilter)
                                 .requestRateLimiter(c -> {
-                                    c.setRateLimiter(redisRateLimiter);
+                                    c.setRateLimiter(writeRateLimiter);
                                     c.setKeyResolver(keyResolver);
                                 }).circuitBreaker(c -> c
                                         .setName("user-service-cb")
@@ -41,7 +58,7 @@ public class GatewayRoutesConfig {
                 .route("expense-service", r -> r
                         .path("/api/v1/expenses/**")
                         .filters(f -> f.filter(jwtAuthFilter).requestRateLimiter(c -> {
-                            c.setRateLimiter(redisRateLimiter);
+                            c.setRateLimiter(readRateLimiter);
                             c.setKeyResolver(keyResolver);
                         }).circuitBreaker(c -> c
                                 .setName("expense-service-cb")
@@ -53,7 +70,7 @@ public class GatewayRoutesConfig {
                         .path("/api/v1/notifications/**")
                         .filters(f -> f.filter(jwtAuthFilter)
                                 .requestRateLimiter(c -> {
-                                    c.setRateLimiter(redisRateLimiter);
+                                    c.setRateLimiter(readRateLimiter);
                                     c.setKeyResolver(keyResolver);
                                 }).circuitBreaker(c -> c
                                         .setName("notification-service-cb")
@@ -64,7 +81,7 @@ public class GatewayRoutesConfig {
                         .path("/api/v1/sms/**")
                         .filters(f -> f.filter(jwtAuthFilter)
                                 .requestRateLimiter(c -> {
-                                    c.setRateLimiter(redisRateLimiter);
+                                    c.setRateLimiter(aiRateLimiter);
                                     c.setKeyResolver(keyResolver);
                                 }).circuitBreaker(c -> c
                                         .setName("ai-service-cb")

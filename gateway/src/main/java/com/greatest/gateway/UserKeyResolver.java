@@ -21,7 +21,7 @@ public class UserKeyResolver implements KeyResolver {
                 .getFirst("X-User-Id");
 
         if (userId != null) {
-            log.debug("user id rate limiter");
+            log.info("Rate-limit key = user:{}", userId);
             return Mono.just(userId);
         }
 
@@ -31,7 +31,7 @@ public class UserKeyResolver implements KeyResolver {
                                         .getRemoteAddress())
                         .getAddress()
                         .getHostAddress();
-        log.debug("ip  rate limiter");
+        log.info("Rate-limit key = ip:{}", ip);
 
         return Mono.just(ip);
     }

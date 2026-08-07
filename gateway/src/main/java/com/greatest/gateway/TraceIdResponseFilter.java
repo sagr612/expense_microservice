@@ -23,17 +23,26 @@ public class TraceIdResponseFilter implements GlobalFilter, Ordered {
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
-        return chain.filter(exchange).doFinally(signal -> {
-            // Get the current span context safely using Micrometer Tracing API
-            Span currentSpan = this.tracer.currentSpan();
-            if (currentSpan != null) {
-                String traceId = currentSpan.context().traceId();
-                ServerHttpResponse response = exchange.getResponse();
+//        return chain.filter(exchange).doFinally(signal -> {
+//            Span currentSpan = this.tracer.currentSpan();
+//            if (currentSpan != null) {
+//                String traceId = currentSpan.context().traceId();
+//                ServerHttpResponse response = exchange.getResponse();
+//                response.getHeaders().add("X-Trace-Id", traceId);
+//            }
+//        });
 
-                // Add traceId to the headers for your client/Zipkin tracking
-                response.getHeaders().add("X-Trace-Id", traceId);
-            }
+        return chain.filter(exchange).doOnSubscribe(sub -> {
+            exchange.getResponse().beforeCommit(() -> {
+                Span currentSpan = this.tracer.currentSpan();
+                if (currentSpan != null) {
+                    exchange.getResponse().getHeaders().add(
+                            "X-Trace-Id", currentSpan.context().traceId());
+                }
+                return Mono.empty();
+            });
         });
+
     }
 
     @Override
