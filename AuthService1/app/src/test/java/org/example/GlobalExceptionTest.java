@@ -125,20 +125,6 @@ class GlobalExceptionTest {
         assertEquals("Email is invalid", response.getBody().getValidationErrors().get("email"));
     }
 
-    //---------------------------------------------------------
-    // handleRuntimeException
-    //---------------------------------------------------------
-
-    @Test
-    void shouldReturnBadRequestForGenericRuntimeException() {
-        RuntimeException ex = new RuntimeException("Something went wrong");
-
-        ResponseEntity<ErrorResponse> response = handler.handleRuntimeException(ex);
-
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Something went wrong", response.getBody().getMessage());
-        assertEquals("Bad Request", response.getBody().getError());
-    }
 
     //---------------------------------------------------------
     // handleGenericException

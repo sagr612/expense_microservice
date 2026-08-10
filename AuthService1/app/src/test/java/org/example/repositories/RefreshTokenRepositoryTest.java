@@ -10,11 +10,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -25,25 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @DataJpaTest
-@Testcontainers
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 public class RefreshTokenRepositoryTest {
 
-    @Container
-    static PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:15")
-                    .withDatabaseName("testdb")
-                    .withUsername("postgres")
-                    .withPassword("123");
 
-    @DynamicPropertySource
-    static void configure(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-    }
     @Autowired
     private UserRepository userRepository;
     @Autowired
@@ -62,13 +43,13 @@ public class RefreshTokenRepositoryTest {
                 .username("john")
                 .password("password")
                 .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .email("john@test.com")
                 .build();
         userRepository.save(user);
 
         refreshToken = RefreshToken.builder()
-                .token("sample-refresh-token")
+                .tokenHash("sample-refresh-token")
                 .userInfo(user)
                 .expiryDate(Instant.now().plus(7, ChronoUnit.DAYS))
                 .build();
@@ -76,23 +57,23 @@ public class RefreshTokenRepositoryTest {
     }
 
     //---------------------------------------------------------
-    // findByToken
+    // findByTokenHash
     //---------------------------------------------------------
 
     @Test
     void shouldFindRefreshTokenByToken() {
 
-        Optional<RefreshToken> result = refreshTokenRepository.findByToken("sample-refresh-token");
+        Optional<RefreshToken> result = refreshTokenRepository.findByTokenHash("sample-refresh-token");
 
         assertTrue(result.isPresent());
-        assertEquals("sample-refresh-token", result.get().getToken());
+        assertEquals("sample-refresh-token", result.get().getTokenHash());
         assertEquals(user.getUserId(), result.get().getUserInfo().getUserId());
     }
 
     @Test
     void shouldReturnEmptyWhenTokenDoesNotExist() {
 
-        Optional<RefreshToken> result = refreshTokenRepository.findByToken("nonexistent-token");
+        Optional<RefreshToken> result = refreshTokenRepository.findByTokenHash("nonexistent-token");
 
         assertTrue(result.isEmpty());
     }
@@ -107,7 +88,7 @@ public class RefreshTokenRepositoryTest {
         Optional<RefreshToken> result = refreshTokenRepository.findByUserInfo(user);
 
         assertTrue(result.isPresent());
-        assertEquals("sample-refresh-token", result.get().getToken());
+        assertEquals("sample-refresh-token", result.get().getTokenHash());
     }
 
     @Test
@@ -118,7 +99,7 @@ public class RefreshTokenRepositoryTest {
                 .username("jane")
                 .password("password")
                 .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber(8888888888L)
+                .phoneNumber("8888888888")
                 .email("jane@test.com")
                 .build();
         userRepository.save(otherUser);
@@ -135,7 +116,7 @@ public class RefreshTokenRepositoryTest {
     @Test
     void shouldDeleteRefreshTokenByUserInfo() {
         refreshTokenRepository.deleteByUserInfo(user);
-        Optional<RefreshToken> result = refreshTokenRepository.findByToken("sample-refresh-token");
+        Optional<RefreshToken> result = refreshTokenRepository.findByTokenHash("sample-refresh-token");
         assertTrue(result.isEmpty());
     }
 
@@ -147,7 +128,7 @@ public class RefreshTokenRepositoryTest {
                 .username("jane")
                 .password("password")
                 .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber(8888888888L)
+                .phoneNumber("8888888888")
                 .email("jane@test.com")
                 .build();
         userRepository.save(otherUser);
@@ -155,7 +136,7 @@ public class RefreshTokenRepositoryTest {
         refreshTokenRepository.deleteByUserInfo(otherUser);
 
         // original token should be untouched
-        assertTrue(refreshTokenRepository.findByToken("sample-refresh-token").isPresent());
+        assertTrue(refreshTokenRepository.findByTokenHash("sample-refresh-token").isPresent());
     }
 
     //---------------------------------------------------------
@@ -166,7 +147,7 @@ public class RefreshTokenRepositoryTest {
     void shouldDeleteExpiredRefreshTokens() {
 
         RefreshToken expired = RefreshToken.builder()
-                .token("expired-token")
+                .tokenHash("expired-token")
                 .userInfo(user)
                 .expiryDate(Instant.now().minus(1, ChronoUnit.DAYS))
                 .build();
@@ -176,21 +157,21 @@ public class RefreshTokenRepositoryTest {
                 .username("jane")
                 .password("password")
                 .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber(8888888888L)
+                .phoneNumber("8888888888")
                 .email("jane@test.com")
                 .build();
         userRepository.save(secondUser);
         expired.setUserInfo(secondUser);
         refreshTokenRepository.save(expired);
         refreshTokenRepository.deleteByExpiryDateBefore(Instant.now());
-        assertTrue(refreshTokenRepository.findByToken("expired-token").isEmpty());
-        assertTrue(refreshTokenRepository.findByToken("sample-refresh-token").isPresent());
+        assertTrue(refreshTokenRepository.findByTokenHash("expired-token").isEmpty());
+        assertTrue(refreshTokenRepository.findByTokenHash("sample-refresh-token").isPresent());
     }
 
     @Test
     void shouldNotDeleteUnexpiredRefreshTokens() {
         refreshTokenRepository.deleteByExpiryDateBefore(Instant.now().minus(1, ChronoUnit.DAYS));
-        assertTrue(refreshTokenRepository.findByToken("sample-refresh-token").isPresent());
+        assertTrue(refreshTokenRepository.findByTokenHash("sample-refresh-token").isPresent());
     }
 }
 

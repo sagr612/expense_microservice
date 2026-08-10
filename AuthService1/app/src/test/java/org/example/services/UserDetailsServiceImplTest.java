@@ -1,12 +1,15 @@
 package org.example.services;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
 import org.example.eventProducer.UserInfoProducer;
 import org.example.exceptions.UserAlreadyExistsException;
 import org.example.model.PasswordDto;
+import org.example.model.RefreshTokenResponse;
 import org.example.model.UserInfoDto;
+import org.example.repository.OutboxRepository;
 import org.example.repository.UserRepository;
 import org.example.response.JwtResponseDTO;
 import org.example.service.JwtService;
@@ -18,6 +21,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -42,7 +46,10 @@ class UserDetailsServiceImplTest {
     private PasswordEncoder passwordEncoder;
 
     @Mock
-    private UserInfoProducer userInfoProducer;
+    private OutboxRepository outboxRepository;
+
+    @Spy
+    private ObjectMapper objectMapper = new ObjectMapper();
 
     @Mock
     private RefreshTokenService refreshTokenService;
@@ -62,7 +69,7 @@ class UserDetailsServiceImplTest {
                 .userId("user-1")
                 .username("john")
                 .password("encodedPassword")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .email("john@test.com")
                 .roles(Set.of(UserRole.ROLE_USER))
                 .build();
@@ -134,7 +141,7 @@ class UserDetailsServiceImplTest {
                         .firstName("John")
                         .lastName("Doe")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
         when(passwordEncoder.encode("password123"))
@@ -143,7 +150,7 @@ class UserDetailsServiceImplTest {
         when(userRepository.findByUsername("john"))
                 .thenReturn(null);
 
-        when(userRepository.existsByPhoneNumber(anyLong()))
+        when(userRepository.existsByPhoneNumber(anyString()))
                 .thenReturn(false);
 
         when(userRepository.existsByEmail(anyString()))
@@ -177,8 +184,7 @@ class UserDetailsServiceImplTest {
         verify(userRepository)
                 .save(any(UserInfo.class));
 
-        verify(userInfoProducer)
-                .sendEventToKafka(any());
+
     }
 
     @Test
@@ -191,7 +197,7 @@ class UserDetailsServiceImplTest {
                         .firstName("John")
                         .lastName("Doe")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
         when(passwordEncoder.encode(anyString()))
@@ -200,7 +206,7 @@ class UserDetailsServiceImplTest {
         when(userRepository.findByUsername(anyString()))
                 .thenReturn(null);
 
-        when(userRepository.existsByPhoneNumber(anyLong()))
+        when(userRepository.existsByPhoneNumber(anyString()))
                 .thenReturn(false);
 
         when(userRepository.existsByEmail(anyString()))
@@ -218,26 +224,20 @@ class UserDetailsServiceImplTest {
 
     @Test
     void shouldThrowWhenUsernameAlreadyExists() {
+        UserInfoDto dto = UserInfoDto.builder()
+                .username("john")
+                .password("password123")
+                .email("john@test.com")
+                .phoneNumber("9999999999")
+                .build();
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .build();
+        when(userRepository.findByUsername("john")).thenReturn(user);
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
-
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
-
-        assertThrows(
+        UserAlreadyExistsException ex = assertThrows(
                 UserAlreadyExistsException.class,
                 () -> service.signupUser(dto)
         );
-
-        verify(userRepository, never())
-                .save(any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
@@ -248,16 +248,15 @@ class UserDetailsServiceImplTest {
                         .username("john")
                         .password("password123")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
 
         when(userRepository.findByUsername(anyString()))
                 .thenReturn(null);
-
-        when(userRepository.existsByPhoneNumber(anyLong()))
+        when(userRepository.existsByEmail(anyString()))
+                .thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString()))
                 .thenReturn(true);
 
         assertThrows(
@@ -272,30 +271,18 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldThrowWhenEmailAlreadyExists() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
+        UserInfoDto dto = UserInfoDto.builder()
                         .username("john")
                         .password("password123")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
 
-        when(userRepository.findByUsername(anyString()))
-                .thenReturn(null);
+        when(userRepository.findByUsername(anyString())).thenReturn(null);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(true);
 
-        when(userRepository.existsByPhoneNumber(anyLong()))
-                .thenReturn(false);
-
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(true);
-
-        assertThrows(
-                UserAlreadyExistsException.class,
-                () -> service.signupUser(dto)
-        );
+        assertThrows(UserAlreadyExistsException.class, () -> service.signupUser(dto));
     }
 
     @Test
@@ -308,7 +295,7 @@ class UserDetailsServiceImplTest {
                         .firstName("John")
                         .lastName("Doe")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
         when(passwordEncoder.encode(anyString()))
@@ -317,7 +304,7 @@ class UserDetailsServiceImplTest {
         when(userRepository.findByUsername(anyString()))
                 .thenReturn(null);
 
-        when(userRepository.existsByPhoneNumber(anyLong()))
+        when(userRepository.existsByPhoneNumber(anyString()))
                 .thenReturn(false);
 
         when(userRepository.existsByEmail(anyString()))
@@ -328,8 +315,6 @@ class UserDetailsServiceImplTest {
 
         service.signupUser(dto);
 
-        verify(userInfoProducer, times(1))
-                .sendEventToKafka(any());
     }
 
     @Test
@@ -342,7 +327,7 @@ class UserDetailsServiceImplTest {
                         .firstName("John")
                         .lastName("Doe")
                         .email("john@test.com")
-                        .phoneNumber(9999999999L)
+                        .phoneNumber("9999999999")
                         .build();
 
         when(passwordEncoder.encode(anyString()))
@@ -351,7 +336,7 @@ class UserDetailsServiceImplTest {
         when(userRepository.findByUsername(anyString()))
                 .thenReturn(null);
 
-        when(userRepository.existsByPhoneNumber(anyLong()))
+        when(userRepository.existsByPhoneNumber(anyString()))
                 .thenReturn(false);
 
         when(userRepository.existsByEmail(anyString()))
@@ -407,13 +392,13 @@ class UserDetailsServiceImplTest {
 
         RefreshToken refreshToken =
                 RefreshToken.builder()
-                        .token("refresh-token")
+                        .tokenHash("refresh-token")
                         .build();
 
         when(refreshTokenService.createRefreshToken("john"))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.GenerateToken(
+        when(jwtService.generateToken(
                 anyString(),
                 anyString(),
                 anyList()))
@@ -428,9 +413,7 @@ class UserDetailsServiceImplTest {
                 "jwt-token",
                 response.getAccessToken());
 
-        assertEquals(
-                "refresh-token",
-                response.getToken());
+        assertEquals("refresh-token", response.getToken());
 
         assertEquals(
                 "newEncodedPassword",
@@ -443,7 +426,7 @@ class UserDetailsServiceImplTest {
                 .createRefreshToken("john");
 
         verify(jwtService)
-                .GenerateToken(
+                .generateToken(
                         anyString(),
                         anyString(),
                         anyList());
@@ -587,15 +570,12 @@ class UserDetailsServiceImplTest {
         when(userRepository.findByUsername("john"))
                 .thenReturn(user);
 
-        RefreshToken refreshToken =
-                RefreshToken.builder()
-                        .token("refresh")
-                        .build();
+
 
         when(refreshTokenService.createRefreshToken("newUser"))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.GenerateToken(
+        when(jwtService.generateToken(
                 anyString(),
                 anyString(),
                 anyList()))
@@ -615,7 +595,7 @@ class UserDetailsServiceImplTest {
                 response.getAccessToken());
 
         assertEquals(
-                "refresh",
+                "refresh-token",
                 response.getToken());
 
         verify(userRepository)

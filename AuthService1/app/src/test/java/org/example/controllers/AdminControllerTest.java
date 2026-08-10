@@ -5,7 +5,10 @@ import org.example.auth.JwtAuthFilter;
 import org.example.controller.AdminController;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
+import org.example.exceptions.DuplicateResourceException;
+import org.example.exceptions.ResourceNotFoundException;
 import org.example.repository.UserRepository;
+import org.example.service.AdminService;
 import org.example.service.JwtService;
 import org.example.service.UserDetailsServiceImpl;
 import org.junit.jupiter.api.Test;
@@ -33,130 +36,68 @@ class AdminControllerTest {
     @Autowired
     MockMvc mockMvc;
 
-//    @Autowired
-//    ObjectMapper objectMapper;
 
     @MockBean
-    UserRepository userRepository;
+    JwtService jwtService;                    // ← satisfies JwtAuthFilter dependency
 
-//    @MockBean
-//    JwtAuthFilter jwtAuthFilter;
-
-//    @MockBean
-//    PasswordEncoder passwordEncoder;
-@MockBean
-JwtService jwtService;                    // ← satisfies JwtAuthFilter dependency
-
+    @MockBean
+    AdminService adminService;
     @MockBean
     UserDetailsServiceImpl userDetailsService;
-    //---------------------------------------------------------
-    // promote user
-    //---------------------------------------------------------
 
     @Test
     void shouldPromoteUserToAdmin() throws Exception {
 
-        UserInfo user = UserInfo.builder()
-                .userId("1")
-                .username("john")
-                .roles(new HashSet<>(Set.of(UserRole.ROLE_USER)))
-                .build();
-
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.of(user));
-
-        mockMvc.perform(post("/auth/v1/admin/users/1/promote")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isOk())
-                .andExpect(content()
-                        .string("User promoted to admin successfully"));
-
-        verify(userRepository).save(any(UserInfo.class));
-    }
-
-    @Test
-    void shouldReturnAlreadyAdminMessage() throws Exception {
-
-        UserInfo user = UserInfo.builder()
-                .userId("1")
-                .username("john")
-                .roles(Set.of(UserRole.ROLE_ADMIN))
-                .build();
-
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.of(user));
+        doNothing().when(adminService).promoteToAdmin("1");
 
         mockMvc.perform(post("/auth/v1/admin/users/1/promote"))
-                .andExpect(status().isOk())
-                .andExpect(content()
-                        .string("User is already an admin"));
+                .andExpect(status().isNoContent());
 
-        verify(userRepository, never()).save(any());
+        verify(adminService).promoteToAdmin("1");
     }
+    @Test
+    void shouldReturnConflictWhenUserAlreadyAdmin() throws Exception {
+
+        doThrow(new DuplicateResourceException("User is already an admin"))
+                .when(adminService).promoteToAdmin("1");
+
+        mockMvc.perform(post("/auth/v1/admin/users/1/promote"))
+                .andExpect(status().isConflict());
+    }
+
 
     @Test
     void shouldReturnNotFoundWhenPromotingMissingUser() throws Exception {
 
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.empty());
+        doThrow(new ResourceNotFoundException("User not found: 1"))
+                .when(adminService).promoteToAdmin("1");
 
         mockMvc.perform(post("/auth/v1/admin/users/1/promote"))
                 .andExpect(status().isNotFound());
-
     }
-    //---------------------------------------------------------
-    // remove admin
-    //---------------------------------------------------------
 
     @Test
     void shouldRemoveAdminRole() throws Exception {
 
-        UserInfo user = UserInfo.builder()
-                .userId("1")
-                .username("john")
-                .roles(new HashSet<>(Set.of(UserRole.ROLE_ADMIN)))
-                .build();
-
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.of(user));
+        doNothing().when(adminService).demoteAdmin("1");
 
         mockMvc.perform(delete("/auth/v1/admin/users/1/admin"))
-                .andExpect(status().isOk())
-                .andExpect(content()
-                        .string("Admin role removed successfully"));
+                .andExpect(status().isNoContent());
 
-        verify(userRepository).save(any(UserInfo.class));
+        verify(adminService).demoteAdmin("1");
     }
 
-    @Test
-    void shouldRemoveAdminRoleEvenWhenUserIsNotAdmin() throws Exception {
 
-        UserInfo user = UserInfo.builder()
-                .userId("1")
-                .username("john")
-                .roles(new HashSet<>(Set.of(UserRole.ROLE_USER)))
-                .build();
 
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.of(user));
-
-        mockMvc.perform(delete("/auth/v1/admin/users/1/admin"))
-                .andExpect(status().isOk())
-                .andExpect(content()
-                        .string("Admin role removed successfully"));
-
-        verify(userRepository).save(any(UserInfo.class));
-    }
 
     @Test
     void shouldReturnNotFoundWhenRemovingAdminFromMissingUser() throws Exception {
 
-        when(userRepository.findById("1"))
-                .thenReturn(Optional.empty());
+        doThrow(new ResourceNotFoundException("User not found: 1"))
+                .when(adminService).demoteAdmin("1");
 
         mockMvc.perform(delete("/auth/v1/admin/users/1/admin"))
                 .andExpect(status().isNotFound());
-
     }
 
 }

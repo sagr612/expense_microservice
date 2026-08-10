@@ -24,12 +24,9 @@ ext {
 }
 
 dependencies {
-    // Spring Boot Starters
-    // FIX THIS: Add platform() so Gradle picks up version 1.20.6 from the BOM
+    testImplementation 'com.h2database:h2'
+
     testImplementation platform('org.testcontainers:testcontainers-bom:2.0.5')
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
-    testImplementation 'org.testcontainers:kafka'
     implementation 'org.springframework.boot:spring-boot-starter'
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -38,8 +35,6 @@ dependencies {
     testImplementation 'org.springframework.security:spring-security-test'
     testImplementation 'org.mockito:mockito-junit-jupiter'
     testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
-    testImplementation 'org.testcontainers:kafka'
     testImplementation 'org.awaitility:awaitility:4.2.2'
     // PostgreSQL Driver
     implementation "org.postgresql:postgresql:$postgresVersion"
@@ -71,9 +66,6 @@ dependencies {
     testCompileOnly "org.projectlombok:lombok:$lombokVersion"
     testAnnotationProcessor "org.projectlombok:lombok:$lombokVersion"
 
-    // Testing
-//    testImplementation "org.junit.jupiter:junit-jupiter:$junitVersion"
-    // Testing (Spring Boot recommended)
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 
 }

@@ -36,7 +36,7 @@ class UserCleanupServiceTest {
                 .userId("user-1")
                 .username("john")
                 .email("john@test.com")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .build();
     }
 

@@ -1,49 +1,43 @@
 package org.example.service;
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Data;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.example.entities.RefreshToken;
+import org.example.entities.OutboxEvent;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
 import org.example.eventProducer.UserInfoEvent;
 import org.example.eventProducer.UserInfoProducer;
-import org.example.exceptions.UserAlreadyExistsException;
+import org.example.exceptions.*;
 import org.example.model.PasswordDto;
-import org.example.model.SignUpResponse;
+import org.example.model.RefreshTokenResponse;
 import org.example.model.UserInfoDto;
+import org.example.repository.OutboxRepository;
 import org.example.repository.UserRepository;
 import org.example.response.JwtResponseDTO;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 
-@Component
-@AllArgsConstructor
-@Data
+@Service
 @Slf4j
+@RequiredArgsConstructor
 public class UserDetailsServiceImpl implements UserDetailsService {
 
-    @Autowired
     private final UserRepository userRepository;
-
-    @Autowired
     private final PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private final UserInfoProducer userInfoProducer;
-
     private final RefreshTokenService refreshTokenService;
     private final JwtService jwtService;
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -58,43 +52,63 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         return userRepository.findByUsername(username);
     }
 
-    public UserInfo signupUser(UserInfoDto userInfoDto) {
-        //        ValidationUtil.validateUserAttributes(userInfoDto);
-        userInfoDto.setPassword(passwordEncoder.encode(userInfoDto.getPassword()));
-        if (Objects.nonNull(checkIfUserAlreadyExist(userInfoDto.getUsername()))) {
-            throw new UserAlreadyExistsException("User with this username already exists");
+    @Transactional
+    public UserInfo signupUser(@Valid UserInfoDto dto) {
+        if (Objects.nonNull(checkIfUserAlreadyExist(dto.getUsername())))
+            throw new UserAlreadyExistsException("Username taken");
+        if (userRepository.existsByEmail(dto.getEmail())) throw new UserAlreadyExistsException("Email taken");
+        if (userRepository.existsByPhoneNumber(dto.getPhoneNumber()))
+            throw new UserAlreadyExistsException("Phone taken");
+
+        String hashedPassword = passwordEncoder.encode(dto.getPassword());
+        UserInfo userInfo = UserInfo.builder()
+                .userId(UUID.randomUUID().toString())
+                .username(dto.getUsername())
+                .password(hashedPassword)
+                .roles(Set.of(UserRole.ROLE_USER))
+                .phoneNumber(dto.getPhoneNumber())
+                .email(dto.getEmail())
+                .build();
+
+
+        UserInfo saved = userRepository.save(userInfo);
+        try {
+            OutboxEvent event = OutboxEvent.builder()
+                    .aggregateId(saved.getUserId())
+                    .eventType("USER_CREATED")
+                    .payload(objectMapper.writeValueAsString(userInfoEventToPublish(dto, userInfo.getUserId())))
+                    .published(false)
+                    .build();
+            outboxRepository.save(event);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to process json object while converting :", e);
+            throw new IllegalStateException("Failed to process json object while converting :", e);
         }
-        String userId = UUID.randomUUID().toString();
+        return saved;
+    }
 
-
-        UserInfo userInfo = UserInfo.builder().userId(userId).username(userInfoDto.getUsername()).password(userInfoDto.getPassword()).roles(Set.of(UserRole.ROLE_USER)).phoneNumber(userInfoDto.getPhoneNumber()).email(userInfoDto.getEmail()).build();
-
-        if (userRepository.existsByPhoneNumber(userInfoDto.getPhoneNumber())) {
-            throw new UserAlreadyExistsException("User with this phone number already exists");
+    private String getCurrentUserId() {
+        Object principal = SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        if (principal instanceof String s) return s;
+        if (principal instanceof UserDetails ud) {
+            // If UserDetails, we need to look up by username since userId isn't stored on it
+            UserInfo user = userRepository.findByUsername(ud.getUsername());
+            if (user == null) throw new ResourceNotFoundException("Authenticated user not found");
+            return user.getUserId();
         }
-
-        if (userRepository.existsByEmail(userInfoDto.getEmail())) {
-            throw new UserAlreadyExistsException("User with this email  already exists");
-        }
-
-        UserInfo user=userRepository.save(userInfo);
-        userInfoProducer.sendEventToKafka(userInfoEventToPublish(userInfoDto, userId));
-        return user;
+        throw new UnauthorizedException("Cannot determine current user");
     }
 
     @Transactional
     public JwtResponseDTO changePassword(PasswordDto passwordDto) {
 
-        String userId = (String) SecurityContextHolder
-                .getContext()
-                .getAuthentication()
-                .getPrincipal();
+        String userId = getCurrentUserId();
 
         UserInfo user = userRepository.findById(userId)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (!passwordEncoder.matches(passwordDto.getOldPassword(), user.getPassword())) {
-            throw new RuntimeException("Incorrect old password");
+            throw new InvalidCredentialsException("Incorrect old password");
         }
 
         if (passwordDto.getOldPassword().equals(passwordDto.getNewPassword())) {
@@ -104,9 +118,9 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         user.setPassword(passwordEncoder.encode(passwordDto.getNewPassword()));
 
 
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getUsername());
+        RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(user.getUsername());
         return JwtResponseDTO.builder()
-                .accessToken(jwtService.GenerateToken(user.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
+                .accessToken(jwtService.generateToken(user.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
                 .token(refreshToken.getToken())
                 .build();
 
@@ -116,10 +130,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         return UserInfoEvent.builder().userId(userId).firstName(userInfoDto.getFirstName()).lastName(userInfoDto.getLastName()).email(userInfoDto.getEmail()).phoneNumber(userInfoDto.getPhoneNumber()).build();
     }
 
-//    public String getUserByUsername(String name) {
-//
-//        return Optional.of(userRepository.findByUsername(name)).map(UserInfo::getUserId).orElse(null);
-//    }
+
     public String getUserByUsername(String name) {
 
         return Optional.ofNullable(userRepository.findByUsername(name))
@@ -129,19 +140,19 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     public JwtResponseDTO changeUsername(String newUsername, String currentUsername) {
         if (userRepository.existsByUsername(newUsername)) {
-            throw new RuntimeException("Username already taken");
+            throw new DuplicateResourceException("Username already taken");
         }
         UserInfo user = userRepository.findByUsername(currentUsername);
         if (user == null) {
-            throw new RuntimeException("User not found.");
+            throw new ResourceNotFoundException("User not found.");
         }
 
         user.setUsername(newUsername);
         userRepository.save(user);
 
-        RefreshToken refreshToken = refreshTokenService.createRefreshToken(user.getUsername());
+        RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(user.getUsername());
         return JwtResponseDTO.builder()
-                .accessToken(jwtService.GenerateToken(user.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
+                .accessToken(jwtService.generateToken(user.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
                 .token(refreshToken.getToken())
                 .build();
     }

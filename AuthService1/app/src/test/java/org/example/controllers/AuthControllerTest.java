@@ -7,6 +7,7 @@ import org.example.controller.AuthController;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
+import org.example.model.RefreshTokenResponse;
 import org.example.model.UserInfoDto;
 import org.example.response.JwtResponseDTO;
 import org.example.service.JwtService;
@@ -68,7 +69,7 @@ class AuthControllerTest {
                 .firstName("John")
                 .lastName("Doe")
                 .email("john@test.com")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .build();
 
         UserInfo savedUser =
@@ -80,16 +81,16 @@ class AuthControllerTest {
 
         RefreshToken refreshToken =
                 RefreshToken.builder()
-                        .token("refresh-token")
+                        .tokenHash("refresh-token")
                         .build();
 
         when(userDetailsService.signupUser(any()))
                 .thenReturn(savedUser);
 
         when(refreshTokenService.createRefreshToken("john"))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.GenerateToken(anyString(), anyString(), anyList()))
+        when(jwtService.generateToken(anyString(), anyString(), anyList()))
                 .thenReturn("jwt-token");
 
         mockMvc.perform(post("/auth/v1/signup")
@@ -112,7 +113,7 @@ class AuthControllerTest {
                 .firstName("John")
                 .lastName("Doe")
                 .email("john@test.com")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .build();
 
         when(userDetailsService.signupUser(any()))
@@ -149,7 +150,7 @@ class AuthControllerTest {
                 .firstName("John")
                 .lastName("Doe")
                 .email("john@test.com")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .build();
 
         UserInfo savedUser =
@@ -161,16 +162,16 @@ class AuthControllerTest {
 
         RefreshToken refreshToken =
                 RefreshToken.builder()
-                        .token("refresh-token")
+                        .tokenHash("refresh-token")
                         .build();
 
         when(userDetailsService.signupUser(any()))
                 .thenReturn(savedUser);
 
         when(refreshTokenService.createRefreshToken(any()))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.GenerateToken(any(), any(), anyList()))
+        when(jwtService.generateToken(any(), any(), anyList()))
                 .thenReturn("jwt-token");
 
         mockMvc.perform(post("/auth/v1/signup")
@@ -178,7 +179,7 @@ class AuthControllerTest {
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
 
-        verify(jwtService).GenerateToken(any(), any(), anyList());
+        verify(jwtService).generateToken(any(), any(), anyList());
 
     }
 
@@ -191,7 +192,7 @@ class AuthControllerTest {
                 .firstName("John")
                 .lastName("Doe")
                 .email("john@test.com")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .build();
 
         UserInfo savedUser =
@@ -203,16 +204,16 @@ class AuthControllerTest {
 
         RefreshToken refreshToken =
                 RefreshToken.builder()
-                        .token("refresh-token")
+                        .tokenHash("refresh-token")
                         .build();
 
         when(userDetailsService.signupUser(any()))
                 .thenReturn(savedUser);
 
         when(refreshTokenService.createRefreshToken(any()))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.GenerateToken(any(), any(), anyList()))
+        when(jwtService.generateToken(any(), any(), anyList()))
                 .thenReturn("jwt-token");
 
         mockMvc.perform(post("/auth/v1/signup")

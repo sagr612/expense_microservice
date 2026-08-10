@@ -1,16 +1,23 @@
 package org.example.eventProducer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.entities.OutboxEvent;
+import org.example.repository.OutboxRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
+import org.springframework.kafka.support.SendResult;
 import org.springframework.messaging.Message;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -21,49 +28,48 @@ class UserInfoProducerTest {
     @Mock
     private KafkaTemplate<String, UserInfoEvent> kafkaTemplate;
 
+
+    @Mock
+    private OutboxRepository outboxRepository;
+
+    @Mock
+    private ObjectMapper objectMapper;
     @InjectMocks
     private UserInfoProducer producer;
 
     @BeforeEach
     void setup() {
-        ReflectionTestUtils.setField(producer, "topicJsonName", "user.created");
+        ReflectionTestUtils.setField(producer, "topic", "user.created");
     }
 
     @Test
-    void shouldSendUserEventToKafka() {
+    void publishPendingEvents_shouldPublishAndMarkAsPublished() throws Exception {
+        // given
+        UserInfoEvent payload = UserInfoEvent.builder()
+                .userId("u1").firstName("A").lastName("B")
+                .email("a@b.com").phoneNumber("9999999999").build();
+        String json = new ObjectMapper().writeValueAsString(payload);
+        OutboxEvent event = OutboxEvent.builder()
+                .id("event-1").aggregateId("u1").eventType("USER_CREATED")
+                .payload(json).published(false).build();
 
-        UserInfoEvent event = UserInfoEvent.builder()
-                .userId("user-1")
-                .firstName("John")
-                .lastName("Doe")
-                .email("john@test.com")
-                .phoneNumber(9999999999L)
-                .build();
+        when(outboxRepository.findTop50ByPublishedFalseOrderByCreatedAtAsc())
+                .thenReturn(List.of(event));
+        when(objectMapper.readValue(anyString(), eq(UserInfoEvent.class)))
+                .thenReturn(payload);
 
-        producer.sendEventToKafka(event);
+        // Mock the CompletableFuture return so .get() doesn't hang
+        CompletableFuture<SendResult<String, UserInfoEvent>> future = CompletableFuture
+                .completedFuture(mock(SendResult.class));
+        when(kafkaTemplate.send(anyString(), anyString(), any())).thenReturn(future);
 
-        ArgumentCaptor<Message<UserInfoEvent>> captor = ArgumentCaptor.forClass(Message.class);
+        // when
+        producer.publishPendingEvents();
 
-        verify(kafkaTemplate, times(1)).send(captor.capture());
-
-        Message<UserInfoEvent> message = captor.getValue();
-
-        assertEquals(event, message.getPayload());
-
-        assertEquals("user.created", message.getHeaders().get(KafkaHeaders.TOPIC));
+        // then
+        verify(kafkaTemplate).send(anyString(), eq("u1"), eq(payload));
+        verify(outboxRepository).save(argThat(OutboxEvent::isPublished));
     }
 
-    @Test
-    void shouldSendExactlyOneMessage() {
 
-        UserInfoEvent event = UserInfoEvent.builder()
-                .userId("1")
-                .build();
-
-        producer.sendEventToKafka(event);
-
-        verify(kafkaTemplate, times(1))
-                .send(any(Message.class));
-        verifyNoMoreInteractions(kafkaTemplate);
-    }
 }

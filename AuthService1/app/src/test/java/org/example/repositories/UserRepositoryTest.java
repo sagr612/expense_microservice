@@ -8,36 +8,15 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 @DataJpaTest
-@Testcontainers
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 class UserRepositoryTest {
 
-    @Container
-    static PostgreSQLContainer<?> postgres =
-            new PostgreSQLContainer<>("postgres:15")
-                    .withDatabaseName("testdb")
-                    .withUsername("postgres")
-                    .withPassword("123");
-
-    @DynamicPropertySource
-    static void configure(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", postgres::getJdbcUrl);
-        registry.add("spring.datasource.username", postgres::getUsername);
-        registry.add("spring.datasource.password", postgres::getPassword);
-        registry.add("spring.datasource.driver-class-name", postgres::getDriverClassName);
-        registry.add("spring.jpa.hibernate.ddl-auto", () -> "create-drop");
-    }
 
     @Autowired
     private UserRepository userRepository;
@@ -52,7 +31,7 @@ class UserRepositoryTest {
                 .username("john")
                 .password("password")
                 .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .email("john@test.com")
                 .build();
         userRepository.save(user);
@@ -117,12 +96,12 @@ class UserRepositoryTest {
 
     @Test
     void shouldReturnTrueWhenPhoneExists() {
-        assertTrue(userRepository.existsByPhoneNumber(9999999999L));
+        assertTrue(userRepository.existsByPhoneNumber("9999999999"));
     }
 
     @Test
     void shouldReturnFalseWhenPhoneDoesNotExist() {
-        assertFalse(userRepository.existsByPhoneNumber(8888888888L));
+        assertFalse(userRepository.existsByPhoneNumber("8888888888"));
     }
 
     //---------------------------------------------------------

@@ -10,11 +10,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 @Entity
-@Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
 @Table(name = "users")
+@Getter
+@Setter
 public class UserInfo {
     @Id
     @Column(name = "user_id")
@@ -31,8 +32,8 @@ public class UserInfo {
     @Builder.Default
     private Set<UserRole> roles = new HashSet<>();
 
-    @Column(nullable = false, unique = true)
-    private Long phoneNumber;
+    @Column(nullable = false, unique = true, length = 20)
+    private String phoneNumber;
     @Column(nullable = false, unique = true)
     private String email;
 
@@ -59,4 +60,6 @@ public class UserInfo {
     protected void onUpdate() {
         updatedAt = Instant.now();
     }
+
+
 }

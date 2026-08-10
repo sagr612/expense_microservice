@@ -3,6 +3,7 @@ package org.example.services;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.exceptions.TokenExpiredException;
+import org.example.model.RefreshTokenResponse;
 import org.example.repository.RefreshTokenRepository;
 import org.example.repository.UserRepository;
 import org.example.service.RefreshTokenService;
@@ -14,6 +15,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Optional;
 
@@ -41,12 +45,10 @@ class RefreshTokenServiceTest {
     void shouldCreateRefreshToken() {
         UserInfo user = UserInfo.builder().userId("1").username("john").build();
         when(userRepository.findByUsername("john")).thenReturn(user);
-        when(refreshTokenRepository.findByUserInfo(user)).thenReturn(Optional.empty());
         when(refreshTokenRepository.save(any())).thenAnswer(i -> i.getArgument(0));
-        RefreshToken token = refreshTokenService.createRefreshToken("john");
+        RefreshTokenResponse token = refreshTokenService.createRefreshToken("john");
         assertNotNull(token);
         assertNotNull(token.getToken());
-        assertEquals(user, token.getUserInfo());
         verify(userRepository).findByUsername("john");
         verify(refreshTokenRepository).deleteByUserInfo(user);
         verify(refreshTokenRepository).flush();
@@ -56,93 +58,70 @@ class RefreshTokenServiceTest {
     @Test
     void shouldDeleteExistingRefreshTokenBeforeCreatingNewOne() {
         UserInfo user = UserInfo.builder().userId("1").username("john").build();
-
-        RefreshToken existing = RefreshToken.builder()
-                        .token("old-token")
-                        .userInfo(user)
-                        .expiryDate(Instant.now().plusSeconds(100))
-                        .build();
-
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
-
-        when(refreshTokenRepository.findByUserInfo(user))
-                .thenReturn(Optional.of(existing));
-
-        when(refreshTokenRepository.save(any()))
-                .thenAnswer(i -> i.getArgument(0));
-
+        when(userRepository.findByUsername("john")).thenReturn(user);
+        when(refreshTokenRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         refreshTokenService.createRefreshToken("john");
-
-        verify(refreshTokenRepository).delete(existing);
+        verify(refreshTokenRepository).deleteByUserInfo(user);   // ← bulk delete, not per-token
+        verify(refreshTokenRepository).flush();
         verify(refreshTokenRepository).save(any());
     }
 
     @Test
     void shouldThrowExceptionWhenUserDoesNotExist() {
-
-        when(userRepository.findByUsername("john"))
-                .thenReturn(null);
-
+        when(userRepository.findByUsername("john")).thenReturn(null);
         assertThrows(
                 UsernameNotFoundException.class,
                 () -> refreshTokenService.createRefreshToken("john")
         );
-
-        verify(refreshTokenRepository, never())
-                .save(any());
+        verify(refreshTokenRepository, never()).save(any());
     }
 
     @Test
-    void shouldFindRefreshTokenByToken() {
+    void shouldFindRefreshTokenByToken() throws Exception {
+        String rawToken = "abc";
+        String tokenHash = sha256Hex(rawToken);   // helper method
 
-        RefreshToken token =
-                RefreshToken.builder()
-                        .token("abc")
-                        .build();
+        RefreshToken token = RefreshToken.builder().tokenHash(tokenHash).build();
+        when(refreshTokenRepository.findByTokenHash(tokenHash)).thenReturn(Optional.of(token));
 
-        when(refreshTokenRepository.findByToken("abc"))
-                .thenReturn(Optional.of(token));
-
-        Optional<RefreshToken> result =
-                refreshTokenService.findByToken("abc");
+        Optional<RefreshToken> result = refreshTokenService.findByToken(rawToken);
 
         assertTrue(result.isPresent());
-        assertEquals("abc", result.get().getToken());
+        assertEquals(tokenHash, result.get().getTokenHash());
+    }
+
+    // Add this helper at the bottom of the class:
+    private static String sha256Hex(String input) throws NoSuchAlgorithmException {
+        MessageDigest md = MessageDigest.getInstance("SHA-256");
+        byte[] hashBytes = md.digest(input.getBytes(StandardCharsets.UTF_8));
+        return java.util.HexFormat.of().formatHex(hashBytes);
     }
 
     @Test
     void shouldReturnValidTokenWhenNotExpired() {
 
-        RefreshToken token =
-                RefreshToken.builder()
+        RefreshToken token = RefreshToken.builder()
                         .expiryDate(Instant.now().plusSeconds(500))
                         .build();
 
-        RefreshToken result =
-                refreshTokenService.verifyExpiration(token);
-
+        RefreshToken result = refreshTokenService.verifyExpirationAndDeleteIfExpired(token);
         assertEquals(token, result);
-
-        verify(refreshTokenRepository, never())
-                .delete(any());
+        verify(refreshTokenRepository, never()).delete(any());
     }
 
     @Test
     void shouldThrowExceptionWhenRefreshTokenExpired() {
 
-        RefreshToken token =
-                RefreshToken.builder()
+        RefreshToken token = RefreshToken.builder()
                         .expiryDate(Instant.now().minusSeconds(10))
                         .build();
 
         assertThrows(
                 TokenExpiredException.class,
-                () -> refreshTokenService.verifyExpiration(token)
+                () -> refreshTokenService.verifyExpirationAndDeleteIfExpired(token)
         );
 
-        verify(refreshTokenRepository)
-                .delete(token);
+        verify(refreshTokenRepository).delete(token);
     }
 
     @Test
@@ -150,8 +129,7 @@ class RefreshTokenServiceTest {
 
         refreshTokenService.cleanupExpiredTokens();
 
-        verify(refreshTokenRepository)
-                .deleteByExpiryDateBefore(any(Instant.class));
+        verify(refreshTokenRepository).deleteByExpiryDateBefore(any(Instant.class));
     }
 
     @Test
@@ -165,16 +143,13 @@ class RefreshTokenServiceTest {
         when(userRepository.findByUsername("john"))
                 .thenReturn(user);
 
-        when(refreshTokenRepository.findByUserInfo(user))
-                .thenReturn(Optional.empty());
-
         when(refreshTokenRepository.save(any()))
                 .thenAnswer(i -> i.getArgument(0));
 
-        RefreshToken t1 =
+        RefreshTokenResponse t1 =
                 refreshTokenService.createRefreshToken("john");
 
-        RefreshToken t2 =
+        RefreshTokenResponse t2 =
                 refreshTokenService.createRefreshToken("john");
 
         assertNotEquals(
@@ -194,13 +169,11 @@ class RefreshTokenServiceTest {
         when(userRepository.findByUsername("john"))
                 .thenReturn(user);
 
-        when(refreshTokenRepository.findByUserInfo(user))
-                .thenReturn(Optional.empty());
 
         when(refreshTokenRepository.save(any()))
                 .thenAnswer(i -> i.getArgument(0));
 
-        RefreshToken token =
+        RefreshTokenResponse token =
                 refreshTokenService.createRefreshToken("john");
 
         assertTrue(

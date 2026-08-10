@@ -9,7 +9,9 @@ import org.example.controller.TokenController;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
+import org.example.exceptions.DuplicateResourceException;
 import org.example.model.PasswordDto;
+import org.example.model.RefreshTokenResponse;
 import org.example.model.UpdateUsernameReq;
 import org.example.request.AuthRequestDTO;
 import org.example.request.RefreshTokenRequestDTO;
@@ -27,6 +29,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
@@ -41,7 +44,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(TokenController.class)
 //@Import(org.example.auth.SecurityConfig.class)
 @AutoConfigureMockMvc(addFilters = false)
-
 class TokenControllerTest {
 
     @Autowired
@@ -88,11 +90,11 @@ class TokenControllerTest {
 
         RefreshToken refreshToken =
                 RefreshToken.builder()
-                        .token("refresh-token")
+                        .tokenHash("refresh-token")
                         .build();
 
         when(refreshTokenService.createRefreshToken("john"))
-                .thenReturn(refreshToken);
+                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
         UserInfo user =
                 UserInfo.builder()
@@ -104,7 +106,7 @@ class TokenControllerTest {
         when(userDetailsService.checkIfUserAlreadyExist("john"))
                 .thenReturn(user);
 
-        when(jwtService.GenerateToken(anyString(), anyString(), anyList()))
+        when(jwtService.generateToken(anyString(), anyString(), anyList()))
                 .thenReturn("jwt-token");
 
         mockMvc.perform(post("/auth/v1/login")
@@ -119,7 +121,7 @@ class TokenControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenAuthenticationFails() throws Exception {
+    void shouldReturnUnauthorizedWhenAuthenticationFails() throws Exception {
 
         AuthRequestDTO request = AuthRequestDTO.builder()
                 .username("john")
@@ -135,7 +137,7 @@ class TokenControllerTest {
         mockMvc.perform(post("/auth/v1/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isUnauthorized());
 
     }
 
@@ -174,17 +176,18 @@ class TokenControllerTest {
 
         RefreshToken token =
                 RefreshToken.builder()
-                        .token("refresh")
+                        .tokenHash("refresh")
                         .userInfo(user)
                         .build();
 
         when(refreshTokenService.findByToken("refresh"))
                 .thenReturn(Optional.of(token));
-
-        when(refreshTokenService.verifyExpiration(token))
+        when(refreshTokenService.createRefreshToken(anyString()))
+                .thenReturn(RefreshTokenResponse.builder().token("refresh").build());
+        when(refreshTokenService.verifyExpirationAndDeleteIfExpired(token))
                 .thenReturn(token);
 
-        when(jwtService.GenerateToken(anyString(), anyString(), anyList()))
+        when(jwtService.generateToken(anyString(), anyString(), anyList()))
                 .thenReturn("new-access");
 
         mockMvc.perform(post("/auth/v1/refreshToken")
@@ -248,7 +251,7 @@ class TokenControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenChangingPasswordFails() throws Exception {
+    void shouldReturnNotFoundWhenChangingPasswordFails() throws Exception {
 
         PasswordDto dto = PasswordDto.builder()
                 .oldPassword("wrong")
@@ -256,12 +259,12 @@ class TokenControllerTest {
                 .build();
 
         when(userDetailsService.changePassword(any()))
-                .thenThrow(new RuntimeException("Incorrect old password"));
+                .thenThrow(new UsernameNotFoundException("Incorrect old password"));
 
         mockMvc.perform(post("/auth/v1/change/passwords")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isNotFound());
 
     }
 
@@ -304,7 +307,7 @@ class TokenControllerTest {
     }
 
     @Test
-    void shouldReturnBadRequestWhenUsernameAlreadyExists() throws Exception {
+    void shouldReturnConflictWhenUsernameAlreadyExists() throws Exception {
 
         UpdateUsernameReq request =
                 UpdateUsernameReq.builder()
@@ -313,51 +316,15 @@ class TokenControllerTest {
                         .build();
 
         when(userDetailsService.changeUsername(anyString(), anyString()))
-                .thenThrow(new RuntimeException("Username already taken"));
+                .thenThrow(new DuplicateResourceException("Username already taken"));
 
         mockMvc.perform(post("/auth/v1/change/username")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isConflict());
 
     }
 
-    //---------------------------------------------------------
-    // trace endpoint
-    //---------------------------------------------------------
-
-    @Test
-    void shouldReturnTraceId() throws Exception {
-
-        Span span = mock(Span.class);
-        TraceContext context = mock(TraceContext.class);
-
-        when(tracer.currentSpan())
-                .thenReturn(span);
-
-        when(span.context())
-                .thenReturn(context);
-
-        when(context.traceId())
-                .thenReturn("trace-123");
-
-        mockMvc.perform(get("/auth/v1/trace"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("trace-123"));
-
-    }
-
-    @Test
-    void shouldReturnNoSpanWhenTraceUnavailable() throws Exception {
-
-        when(tracer.currentSpan())
-                .thenReturn(null);
-
-        mockMvc.perform(get("/auth/v1/trace"))
-                .andExpect(status().isOk())
-                .andExpect(content().string("NO_SPAN"));
-
-    }
 
     //---------------------------------------------------------
     // validation

@@ -5,8 +5,8 @@ spring:
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:authservice}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:123}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
 
     hikari:
       maximum-pool-size: 10
@@ -25,7 +25,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
-        format_sql: true
+#        format_sql: true
 
 
   kafka:
@@ -38,6 +38,9 @@ spring:
       acks: all
       retries: 3
       observation-enabled: true
+      properties:
+        enable.idempotence: true
+        max.in.flight.requests.per.connection: 5
 
     topic-json:
       name: user_service
@@ -50,9 +53,10 @@ server:
   address: 0.0.0.0
 
 jwt:
-  secret: 20MaUh0L0yju5vwCwMXySKjsqwhV+/D9BJvfkzaKGWM=
-  expiration: 3600000
-  refresh-expiration: 604800000
+  secret: ${JWT_SECRET}
+  expiration: ${JWT_EXPIRATION:3600000}
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+
 
 logging:
   level:

@@ -4,10 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.PropertyNamingStrategy;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.*;
 import org.example.entities.UserInfo;
 
@@ -26,8 +23,10 @@ public class UserInfoDto {
     private String username;
 
     @NotBlank(message = "Password is required")
-    @Size(min = 8, message = "Password must be at least 8 characters")
+    @Size(min = 8, max = 128, message = "Password must be 8-128 characters")
+    @Pattern(regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$", message = "Password must contain at least one letter and one digit")
     private String password;
+
 
     @NotBlank(message = "First name is required")
     private String firstName;
@@ -37,8 +36,10 @@ public class UserInfoDto {
 
 
 
-    @NotNull(message = "Phone number is required")
-    private Long phoneNumber;
+    @NotBlank(message = "Phone number is required")
+    @Pattern(regexp = "^\\+?[0-9]{7,15}$", message = "Phone number must be 7-15 digits, optionally starting with +")
+    private String phoneNumber;
+
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email should be valid")
