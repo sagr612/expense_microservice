@@ -42,6 +42,9 @@
 **/src/main/resources/application-dev.yaml
 # or ignore all profile-specific configs
 # **/src/main/resources/application-*.yaml
+**/src/main/resources/.env
+**/src/main/resources/application-*.yaml
+!**/src/main/resources/application.yaml
 
 ############################
 # OS files

@@ -28,7 +28,13 @@ public class UserInfo {
     @Column(nullable = false)
     private String password;
 
+    @ElementCollection(fetch = FetchType.EAGER)
     @Enumerated(EnumType.STRING)
+    @CollectionTable(
+            name = "user_roles",
+            joinColumns = @JoinColumn(name = "user_id")
+    )
+    @Column(name = "role", length = 50, nullable = false)
     @Builder.Default
     private Set<UserRole> roles = new HashSet<>();
 

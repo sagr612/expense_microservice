@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @Builder
 public class ExpenseCreatedEvent {
+    private String eventId;
     private String userId;
     private BigDecimal amount;
     private String category;

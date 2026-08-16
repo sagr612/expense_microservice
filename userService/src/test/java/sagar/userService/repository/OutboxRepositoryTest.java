@@ -5,6 +5,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.TestPropertySource;
 import sagar.userService.entities.OutboxEvent;
 
 import java.time.Instant;
@@ -16,6 +17,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 // excluded it) — no Testcontainers needed here since we're only exercising the query method,
 // not anything Postgres-specific.
 @DataJpaTest
+@ActiveProfiles("test")
+//@TestPropertySource(properties = "spring.flyway.enabled=false") // disable flyway migration
 class OutboxRepositoryTest {
 
     @Autowired
@@ -77,4 +80,48 @@ class OutboxRepositoryTest {
 
         assertThat(result).isEmpty();
     }
+
+    @Test
+    void findTop50ByStatusAndNextRetryAtBefore_returnsOnlyEligiblePendingEvents() {
+        Instant now = Instant.now();
+
+        OutboxEvent eligible = OutboxEvent.builder()
+                .aggregateId("user-1").eventType("USER_DELETED").payload("{}")
+                .status(OutboxEvent.OutboxStatus.PENDING)
+                .nextRetryAt(now.minusSeconds(60))  // ready
+                .build();
+
+        OutboxEvent notYetDue = OutboxEvent.builder()
+                .aggregateId("user-2").eventType("USER_DELETED").payload("{}")
+                .status(OutboxEvent.OutboxStatus.PENDING)
+                .nextRetryAt(now.plusSeconds(60))  // future — skip
+                .build();
+
+        OutboxEvent published = OutboxEvent.builder()
+                .aggregateId("user-3").eventType("USER_DELETED").payload("{}")
+                .status(OutboxEvent.OutboxStatus.PUBLISHED)
+                .nextRetryAt(now.minusSeconds(60))
+                .published(true)
+                .build();
+
+        OutboxEvent dead = OutboxEvent.builder()
+                .aggregateId("user-4").eventType("USER_DELETED").payload("{}")
+                .status(OutboxEvent.OutboxStatus.DEAD)
+                .nextRetryAt(now.minusSeconds(60))
+                .build();
+
+        entityManager.persist(eligible);
+        entityManager.persist(notYetDue);
+        entityManager.persist(published);
+        entityManager.persist(dead);
+        entityManager.flush();
+
+        List<OutboxEvent> result = outboxRepository
+                .findTop50ByStatusAndNextRetryAtBeforeOrderByCreatedAtAsc(
+                        OutboxEvent.OutboxStatus.PENDING, now);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getAggregateId()).isEqualTo("user-1");
+    }
+
 }

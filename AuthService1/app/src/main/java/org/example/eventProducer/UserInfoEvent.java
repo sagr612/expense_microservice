@@ -14,6 +14,7 @@ import lombok.Setter;
 @Builder
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UserInfoEvent {
+    private String eventId;
     private String firstName;
     private String lastName;
     private String email;

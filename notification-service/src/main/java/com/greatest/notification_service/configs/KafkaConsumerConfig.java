@@ -16,7 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-public class KafkaConsumerConfig {
+public class  KafkaConsumerConfig {
 
     private final KafkaProperties kafkaProperties;
 

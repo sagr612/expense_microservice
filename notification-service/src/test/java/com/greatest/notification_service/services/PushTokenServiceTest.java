@@ -92,4 +92,16 @@ class PushTokenServiceTest {
             verifyNoInteractions(expoPushService);
         }
     }
+
+    @Test
+    void sendsToExpo_evenIfTokenLooksInvalid_leavesValidationToExpoService() {
+        PushToken token = PushToken.builder().userId("user-1").expoToken("garbage-not-a-real-token").build();
+        when(pushTokenRepository.findByUserId("user-1")).thenReturn(Optional.of(token));
+
+        pushTokenService.sendToUser("user-1", "Title", "Body");
+
+        // PushTokenService's job is just to look up + delegate; validation is ExpoPushService's problem.
+        verify(expoPushService).sendPushNotification("garbage-not-a-real-token", "Title", "Body");
+    }
+
 }

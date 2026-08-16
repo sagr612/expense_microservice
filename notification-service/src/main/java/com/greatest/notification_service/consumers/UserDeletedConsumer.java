@@ -16,7 +16,7 @@ public class UserDeletedConsumer {
 
     @KafkaListener(
             topics = "user.deleted",
-            groupId = "notificationService-group",
+            groupId = "notification-service-group",
             containerFactory =
                     "userDeletedKafkaListenerContainerFactory"
     )

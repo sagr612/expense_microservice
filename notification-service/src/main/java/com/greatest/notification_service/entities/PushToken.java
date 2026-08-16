@@ -21,10 +21,10 @@ public class PushToken {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false, unique = true, length = 100)
     private String userId;
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     private String expoToken;   // e.g. ExponentPushToken[7Q3kxJIjDTUeak-EQuF03T]
 
     @UpdateTimestamp

@@ -75,6 +75,7 @@ public class JwtAuthFilter implements GatewayFilter {
         ServerHttpRequest request =
                 exchange.getRequest()
                         .mutate()
+                         // Keep Authorization header so downstream resource servers re-verify JWT.
                         .header("X-User-Id", userId)
                         .header("X-Username", username)
                         .header("X-Roles", String.join(",", roles))

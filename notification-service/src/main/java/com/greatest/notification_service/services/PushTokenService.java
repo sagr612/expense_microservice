@@ -15,6 +15,10 @@ public class PushTokenService {
     private final ExpoPushService expoPushService;
 
     public void saveToken(String userId, String expoToken) {
+        if(userId == null || expoToken == null) {
+            log.error("Error saving push token");
+            return;
+        }
         PushToken token = pushTokenRepository
                 .findByUserId(userId)
                 .orElse(PushToken.builder().userId(userId).build());
@@ -24,6 +28,10 @@ public class PushTokenService {
     }
 
     public void sendToUser(String userId, String title, String body) {
+        if(userId==null || title==null || body==null) {
+            log.error("Error sending push token");
+            return;
+        }
         pushTokenRepository.findByUserId(userId)
                 .ifPresentOrElse(
                         token -> expoPushService.sendPushNotification(

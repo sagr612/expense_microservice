@@ -3,17 +3,19 @@ package sagar.userService.controllers;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import sagar.userService.controller.UserController;
 import sagar.userService.dtos.UserInfoDto;
 import sagar.userService.dtos.UserProfileImageResponse;
 import sagar.userService.exceptions.DuplicateResourceException;
+import sagar.userService.services.OutboxAdminService;
 import sagar.userService.services.UserService;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -23,6 +25,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(UserController.class)
+@AutoConfigureMockMvc(addFilters = false)
+@WithMockUser(username = "user-1", roles = "USER")
 class UserControllerTest {
 
     @Autowired
@@ -33,6 +37,8 @@ class UserControllerTest {
 
     @MockitoBean
     private UserService userService;
+    @MockitoBean
+    private OutboxAdminService outboxAdminService;
 
     private UserInfoDto validDto() {
         return UserInfoDto.builder()
@@ -47,7 +53,7 @@ class UserControllerTest {
     @Test
     void createUpdate_returns201_whenPayloadIsValid() throws Exception {
         UserInfoDto dto = validDto();
-        when(userService.createOrUpdateUser(any())).thenReturn(dto);
+        when(userService.createUser(any())).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/users")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -74,7 +80,7 @@ class UserControllerTest {
     @Test
     void createUpdate_returns409_whenEmailAlreadyExists() throws Exception {
         UserInfoDto dto = validDto();
-        when(userService.createOrUpdateUser(any()))
+        when(userService.createUser(any()))
                 .thenThrow(new DuplicateResourceException("Email already in use: " + dto.getEmail()));
 
         mockMvc.perform(post("/api/v1/users")
@@ -93,6 +99,7 @@ class UserControllerTest {
     }
 
     @Test
+    @WithMockUser(username = "user-1", roles = "ADMIN")
     void getUser_returns400_whenUserNotFound() throws Exception {
         when(userService.getUserByUserId("missing"))
                 .thenThrow(new IllegalArgumentException("User not found with userId: missing"));

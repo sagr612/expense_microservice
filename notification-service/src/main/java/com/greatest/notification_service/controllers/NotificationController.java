@@ -7,6 +7,7 @@ import com.greatest.notification_service.services.PushTokenService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,12 +21,8 @@ public class NotificationController {
     private final PushTokenService pushTokenService;
     private final NotificationService notificationService;
 
-    // React Native app calls this after getting the token from Expo
     @PostMapping("/register-token")
-    public ResponseEntity<Void> registerToken(
-            @RequestHeader("X-User-Id") String userId,
-            @RequestBody RegisterTokenRequest request
-    ) {
+    public ResponseEntity<Void> registerToken(@AuthenticationPrincipal String userId, @RequestBody RegisterTokenRequest request) {
         log.info("Registering push token for userId: {}", userId);
         pushTokenService.saveToken(userId, request.getExpoToken());
         return ResponseEntity.ok().build();
@@ -33,33 +30,18 @@ public class NotificationController {
 
     @GetMapping
     public ResponseEntity<List<NotificationDto>>
-    getNotifications(
-            @RequestHeader("X-User-Id")
-            String userId
-    ) {
-
-        return ResponseEntity.ok(
-                notificationService.getNotifications(userId)
-        );
+    getNotifications(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(notificationService.getNotifications(userId));
     }
+
     @PatchMapping("/{id}/read")
-    public ResponseEntity<Void> markRead(
-            @PathVariable String id
-    ) {
-
-        notificationService.markRead(id);
-
+    public ResponseEntity<Void> markRead(@PathVariable String id,@AuthenticationPrincipal String userId) {
+        notificationService.markRead(id, userId);
         return ResponseEntity.ok().build();
     }
 
     @GetMapping("/unread-count")
-    public ResponseEntity<Long> unreadCount(
-            @RequestHeader("X-User-Id")
-            String userId
-    ) {
-
-        return ResponseEntity.ok(
-                notificationService.unreadCount(userId)
-        );
+    public ResponseEntity<Long> unreadCount(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(notificationService.unreadCount(userId));
     }
 }

@@ -53,20 +53,43 @@ class UserServiceTest {
     }
 
     @Test
-    void createOrUpdateUser_acquiresLockOnUserId_andDelegatesToWriteService() {
+    void createUser_acquiresLockOnUserId_andDelegatesToWriteService() {
         stubLockManagerToExecuteAction();
-
         UserInfoDto dto = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
-        UserInfoDto saved = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
+        when(userWriteService.createUserInternal(dto)).thenReturn(dto);
 
-        when(userWriteService.createOrUpdateUserInternal(dto)).thenReturn(saved);
-
-        UserInfoDto result = userService.createOrUpdateUser(dto);
+        UserInfoDto result = userService.createUser(dto);
 
         assertThat(result.getUserId()).isEqualTo("user-1");
         verify(userLockManager).withUserLock(eq("user-1"), any(Supplier.class));
+        verify(userWriteService).createUserInternal(dto);
+    }
+
+    @Test
+    void updateUser_acquiresLockOnUserId_andDelegatesToWriteService() {
+        stubLockManagerToExecuteAction();
+        UserInfoDto dto = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
+        when(userWriteService.updateUserInternal("user-1", dto)).thenReturn(dto);
+
+        UserInfoDto result = userService.updateUser("user-1", dto);
+
+        assertThat(result.getUserId()).isEqualTo("user-1");
+        verify(userLockManager).withUserLock(eq("user-1"), any(Supplier.class));
+        verify(userWriteService).updateUserInternal("user-1", dto);
+    }
+
+    @Test
+    void upsertFromEvent_acquiresLockOnUserId_andDelegatesToWriteService() {
+        stubLockManagerToExecuteAction();
+        UserInfoDto dto = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
+        when(userWriteService.createOrUpdateUserInternal(dto)).thenReturn(dto);
+
+        UserInfoDto result = userService.upsertFromEvent(dto);
+
+        verify(userLockManager).withUserLock(eq("user-1"), any(Supplier.class));
         verify(userWriteService).createOrUpdateUserInternal(dto);
     }
+
 
     @Test
     void getUserByUserId_returnsDto_whenUserExists() {
@@ -124,6 +147,8 @@ class UserServiceTest {
 
     @Test
     void updateProfileImage_uploadsNewImage_andDeletesOldOne_whenOldImageExists() {
+        stubLockManagerToExecuteAction();
+
         UserInfo user = UserInfo.builder()
                 .userId("user-1")
                 .profilePic("old-url")
@@ -151,6 +176,7 @@ class UserServiceTest {
 
     @Test
     void updateProfileImage_skipsDelete_whenUserHadNoPreviousImage() {
+        stubLockManagerToExecuteAction();
         UserInfo user = UserInfo.builder()
                 .userId("user-1")
                 .profilePic(null)
@@ -169,6 +195,7 @@ class UserServiceTest {
 
     @Test
     void updateProfileImage_doesNotSaveOrDelete_whenUploadFails() {
+        stubLockManagerToExecuteAction();
         UserInfo user = UserInfo.builder()
                 .userId("user-1")
                 .profileImagePublicId("old-public-id")
@@ -189,6 +216,8 @@ class UserServiceTest {
 
     @Test
     void updateProfileImage_swallowsDeleteFailure_andStillReturnsSuccessResponse() {
+        stubLockManagerToExecuteAction();
+
         UserInfo user = UserInfo.builder()
                 .userId("user-1")
                 .profileImagePublicId("old-public-id")
@@ -211,6 +240,7 @@ class UserServiceTest {
 
     @Test
     void updateProfileImage_throwsIllegalArgument_whenUserNotFound() {
+        stubLockManagerToExecuteAction();
         when(userRepository.findByUserId("missing")).thenReturn(Optional.empty());
         MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
 
@@ -220,4 +250,29 @@ class UserServiceTest {
 
         verifyNoInteractions(cloudinaryService);
     }
+    @Test
+    void updateProfileImage_deletesOrphanedNewImage_whenDbSaveFails() {
+        stubLockManagerToExecuteAction();
+        UserInfo user = UserInfo.builder()
+                .userId("user-1")
+                .profileImagePublicId("old-public-id")
+                .build();
+        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "image", "avatar.png", "image/png", "bytes".getBytes());
+        when(cloudinaryService.upload(file)).thenReturn(
+                Map.of("secure_url", "new-url", "public_id", "new-public-id"));
+        when(userRepository.save(any())).thenThrow(new RuntimeException("DB down"));
+
+        assertThatThrownBy(() -> userService.updateProfileImage("user-1", file))
+                .isInstanceOf(RuntimeException.class);
+
+        // The critical compensating-action assertion: DB failed AFTER upload succeeded,
+        // so the new (orphaned) image must be deleted from Cloudinary.
+        verify(cloudinaryService).delete("new-public-id");
+        // The OLD image must NOT be touched.
+        verify(cloudinaryService, never()).delete("old-public-id");
+    }
+
 }

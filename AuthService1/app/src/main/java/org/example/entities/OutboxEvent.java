@@ -24,4 +24,14 @@ public class OutboxEvent {
     @CreationTimestamp
     private Instant createdAt;
     private boolean published;
+    @Column(nullable = false) @Builder.Default private int attemptCount = 0;
+    @Column(nullable = false) @Builder.Default private Instant nextRetryAt = Instant.now();
+    @Column(columnDefinition = "TEXT") private String lastError;
+
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) @Builder.Default
+    private OutboxStatus status = OutboxStatus.PENDING;
+
+    public enum OutboxStatus { PENDING, PUBLISHED, DEAD }
+
 }
+

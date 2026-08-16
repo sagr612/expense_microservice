@@ -12,6 +12,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Instant;
 import java.util.List;
@@ -121,22 +122,34 @@ class NotificationServiceTest {
     class MarkRead {
 
         @Test
-        void setsIsReadTrue_onExistingNotification() {
+        void setsIsReadTrue_whenCallerIsOwner() {
             when(repository.findById("notif-1")).thenReturn(Optional.of(notification));
 
-            notificationService.markRead("notif-1");
+            notificationService.markRead("notif-1", "user-1");   // owner matches
 
             assertThat(notification.getIsRead()).isTrue();
-            // no explicit save call expected — @Transactional dirty-checking handles the flush
+            verify(repository).save(notification);
         }
 
         @Test
-        void throwsRuntimeException_whenNotificationNotFound() {
+        void throwsAccessDenied_whenCallerIsNotOwner() {
+            when(repository.findById("notif-1")).thenReturn(Optional.of(notification));
+
+            assertThatThrownBy(() -> notificationService.markRead("notif-1", "some-other-user"))
+                    .isInstanceOf(AccessDeniedException.class);
+
+            assertThat(notification.getIsRead()).isFalse();
+            verify(repository, never()).save(any());
+        }
+
+        @Test
+        void throwsIllegalArgument_whenNotificationNotFound() {
             when(repository.findById("missing")).thenReturn(Optional.empty());
 
-            assertThatThrownBy(() -> notificationService.markRead("missing"))
-                    .isInstanceOf(RuntimeException.class)
+            assertThatThrownBy(() -> notificationService.markRead("missing", "user-1"))
+                    .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("Notification not found");
         }
     }
+
 }

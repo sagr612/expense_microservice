@@ -19,7 +19,7 @@ public class Notification {
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
 
-    @Column(nullable = false)
+    @Column(nullable = false, length = 100)
     private String userId;
 
     @Column(nullable = false)

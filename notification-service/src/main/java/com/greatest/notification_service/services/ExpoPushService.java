@@ -1,8 +1,10 @@
 package com.greatest.notification_service.services;
 
 import com.greatest.notification_service.dtos.ExpoMessage;
+import com.greatest.notification_service.repositories.PushTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
@@ -15,12 +17,8 @@ import java.time.Duration;
 @Slf4j
 public class ExpoPushService {
 
-    // WebClient is non-blocking — better than RestTemplate for outbound calls
-    private final WebClient webClient = WebClient.builder()
-            .baseUrl("https://exp.host")
-            .defaultHeader("Content-Type", "application/json")
-            .defaultHeader("Accept", "application/json")
-            .build();
+    private final PushTokenRepository pushTokenRepository;
+    private final WebClient expoWebClient;
 
     public void sendPushNotification(String expoToken, String title, String body) {
         if (expoToken == null || !expoToken.startsWith("ExponentPushToken")) {
@@ -35,8 +33,7 @@ public class ExpoPushService {
                 .sound("default")
                 .build();
 
-
-        webClient.post()
+        expoWebClient.post()
                 .uri("/--/api/v2/push/send")
                 .bodyValue(message)
                 .retrieve()
@@ -45,9 +42,16 @@ public class ExpoPushService {
                         .filter(ex -> ex instanceof WebClientRequestException))
                 .doOnSuccess(resp ->
                         log.info("Push sent to token={} response={}", expoToken, resp))
+                .doOnError(err -> {
+                    if (err.getMessage() != null && err.getMessage().contains("DeviceNotRegistered")) {
+                        log.warn("Deleting stale expo token: {}", expoToken);
+                        pushTokenRepository.deleteByExpoToken(expoToken);
+                    }
+                })
                 .subscribe(
                         resp -> { /* already logged in doOnSuccess */ },
-                        err -> log.error("Push failed for token={}: {}", expoToken, err.getMessage())
+                        err -> log.error("Push failed for token={}: {}",
+                                expoToken, err.getMessage())
                 );
 
     }

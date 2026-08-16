@@ -2,11 +2,15 @@ package sagar.userService.consumer;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import sagar.userService.dtos.UserInfoDto;
+import sagar.userService.entities.ProcessedEvent;
+import sagar.userService.repository.ProcessedEventRepository;
 import sagar.userService.services.UserService;
-
 
 @Service
 @RequiredArgsConstructor
@@ -14,29 +18,37 @@ import sagar.userService.services.UserService;
 public class AuthServiceConsumer {
 
     private final UserService userService;
+    private final ProcessedEventRepository processedEventRepository;
 
-
-//    @KafkaListener(topics = "${spring.kafka.topic-json.name}", groupId = "${spring.kafka.consumer.group-id}")
-//    public void listen(UserInfoDto eventData)  {
-//
-//        try {
-//            // todo: make it transactional(can use redis lock hint:using userid  ) to handle idempotency & validate email phone number etc. race condition thing what if multiple instances are creating or updating same userdata
-//
-//            UserInfoDto created = userService.createOrUpdateUser(eventData);
-//            log.info("Successfully processed user created event - userId: {}", created.getUserId());
-//        } catch (IllegalArgumentException ex) {
-//            log.warn("Invalid user data received: {}", ex.getMessage(), ex);
-//        } catch (Exception ex) {
-//            log.error("Unexpected error processing user created event for userId: {}",
-//                    eventData.getUserId(), ex);
-//            throw ex;
-//        }
-//    }
+    @Value("${spring.kafka.consumer.group-id}")
+    private String consumerGroup;
 
     @KafkaListener(topics = "${spring.kafka.topic-json.name}", groupId = "${spring.kafka.consumer.group-id}")
+    @Transactional
     public void listen(UserInfoDto eventData) {
-        UserInfoDto created = userService.createOrUpdateUser(eventData);
-        log.info("Successfully processed user event - userId: {}", created.getUserId());
-    }
+        String eventId = eventData.getEventId();
 
+        if (eventId == null || eventId.isBlank()) {
+            log.warn("Event without eventId — falling back to at-least-once semantics; userId={}",
+                    eventData.getUserId());
+            userService.upsertFromEvent(eventData);
+            return;
+        }
+
+        if (processedEventRepository.existsById(eventId)) {
+            log.debug("Skipping already-processed event {}", eventId);
+            return;
+        }
+
+        try {
+            userService.upsertFromEvent(eventData);
+            processedEventRepository.save(ProcessedEvent.builder()
+                    .eventId(eventId)
+                    .consumerGroup(consumerGroup)
+                    .build());
+            log.info("Processed event {} for userId {}", eventId, eventData.getUserId());
+        } catch (DataIntegrityViolationException dup) {
+            log.debug("Concurrent processing of {} — swallowing dup marker error", eventId);
+        }
+    }
 }

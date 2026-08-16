@@ -21,19 +21,29 @@ public class KafkaProducerConfig {
 
     @Bean
     public ProducerFactory<String, Object> producerFactory() {
-
         Map<String, Object> props = new HashMap<>();
-
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
-
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-
         props.put(JsonSerializer.ADD_TYPE_INFO_HEADERS, false);
+
+        // ── Reliability (the whole point of the outbox pattern) ──
+        props.put(ProducerConfig.ACKS_CONFIG, "all");
+        props.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        props.put(ProducerConfig.RETRIES_CONFIG, Integer.MAX_VALUE);
+        props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 5);
+
+        // ── Timeouts (bounded so the outbox poller isn't blocked forever) ──
+        props.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 30_000); // upper bound on retries
+        props.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 10_000);  // per-request
+
+        // ── Small perf/latency knobs (safe defaults) ──
+        props.put(ProducerConfig.LINGER_MS_CONFIG, 20);
+        props.put(ProducerConfig.COMPRESSION_TYPE_CONFIG, "lz4");
 
         return new DefaultKafkaProducerFactory<>(props);
     }
+
 
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {

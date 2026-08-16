@@ -6,7 +6,6 @@ import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.ExpenseType;
 import com.greatest.expenseService.services.BudgetService;
 import com.greatest.expenseService.services.ExpenseService;
-import io.micrometer.tracing.Tracer;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.NonNull;
@@ -18,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
@@ -32,19 +32,7 @@ import java.util.List;
 public class ExpenseController {
 
     private final ExpenseService expenseService;
-    private final Tracer tracer;
     private final BudgetService budgetService;
-
-    @GetMapping("/trace")
-    public String trace() {
-        var span = tracer.currentSpan();
-        log.info("trace test");
-        if (span == null) {
-            return "NO_SPAN";
-        }
-
-        return span.context().traceId();
-    }
 
 
     //    @GetMapping
@@ -66,62 +54,23 @@ public class ExpenseController {
 //        return ResponseEntity.ok(expenses);
 //    }
     @GetMapping
-    public ResponseEntity<Page<ExpenseDto>> getExpenses(
+    public ResponseEntity<Page<ExpenseDto>>
+    getExpenses(@AuthenticationPrincipal String userId,
+                @RequestParam(required = false) CategoryType category,
+                @RequestParam(required = false) ExpenseType type,
+                @RequestParam(required = false) BigDecimal minAmount,
+                @RequestParam(required = false) BigDecimal maxAmount,
+                @RequestParam(required = false) LocalDate fromDate,
+                @RequestParam(required = false) LocalDate toDate,
+                @RequestParam(defaultValue = "0") int page,
+                @RequestParam(defaultValue = "10") int size,
+                @RequestParam(defaultValue = "createdAt") String sortBy,
+                @RequestParam(defaultValue = "false") boolean ascending) {
+        Sort sort = ascending ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
-            @RequestHeader("X-User-Id")
-            String userId,
+        Pageable pageable = PageRequest.of(page, size, sort);
 
-            @RequestParam(required = false)
-            CategoryType category,
-
-            @RequestParam(required = false)
-            ExpenseType type,
-
-            @RequestParam(required = false)
-            BigDecimal minAmount,
-
-            @RequestParam(required = false)
-            BigDecimal maxAmount,
-
-
-            @RequestParam(required = false)
-            LocalDate fromDate,
-
-            @RequestParam(required = false)
-            LocalDate toDate,
-
-            @RequestParam(defaultValue = "0")
-            int page,
-
-            @RequestParam(defaultValue = "10")
-            int size,
-
-            @RequestParam(defaultValue = "createdAt")
-            String sortBy,
-
-            @RequestParam(defaultValue = "false")
-            boolean ascending
-    ) {
-
-        Sort sort = ascending
-                ? Sort.by(sortBy).ascending()
-                : Sort.by(sortBy).descending();
-
-        Pageable pageable =
-                PageRequest.of(page, size, sort);
-
-        return ResponseEntity.ok(
-                expenseService.searchExpenses(
-                        userId,
-                        category,
-                        type,
-                        minAmount,
-                        maxAmount,
-                        fromDate,
-                        toDate,
-                        pageable
-                )
-        );
+        return ResponseEntity.ok(expenseService.searchExpenses(userId, category, type, minAmount, maxAmount, fromDate, toDate, pageable));
     }
 
     /**
@@ -133,10 +82,7 @@ public class ExpenseController {
     )
     @PostMapping
     @LogExecutionTime
-    public ResponseEntity<ExpenseDto> createExpense(
-            @RequestHeader("X-User-Id") @NonNull String userId,
-            @RequestBody @Valid ExpenseDto request
-    ) {
+    public ResponseEntity<ExpenseDto> createExpense(@AuthenticationPrincipal String userId, @RequestBody @Valid ExpenseDto request) {
         log.info("POST /api/v1/expenses - userId: {}, externalId: {}", userId, request.getExternalId());
 
         request.setUserId(userId); // Ensure userId from header is used
@@ -150,10 +96,7 @@ public class ExpenseController {
      * Update an existing expense
      */
     @PutMapping
-    public ResponseEntity<ExpenseDto> updateExpense(
-            @RequestHeader("X-User-Id") @NonNull String userId,
-            @RequestBody @Valid ExpenseDto request
-    ) {
+    public ResponseEntity<ExpenseDto> updateExpense(@AuthenticationPrincipal String userId, @RequestBody @Valid ExpenseDto request) {
         log.info("PUT /api/v1/expenses - userId: {}, externalId: {}", userId, request.getExternalId());
 
         request.setUserId(userId); // Ensure userId from header is used
@@ -167,10 +110,7 @@ public class ExpenseController {
      * get an existing expense
      */
     @GetMapping("/{externalId}")
-    public ResponseEntity<ExpenseDto> getExpense(
-            @RequestHeader("X-User-Id") @NonNull String userId,
-            @PathVariable @NonNull String externalId
-    ) {
+    public ResponseEntity<ExpenseDto> getExpense(@AuthenticationPrincipal String userId, @PathVariable @NonNull String externalId) {
         log.info("get /api/v1/expenses/{} - userId: {}", externalId, userId);
 
         ExpenseDto dto = expenseService.getExpense(userId, externalId);
@@ -183,14 +123,9 @@ public class ExpenseController {
      * Delete an expense by externalId
      */
     @DeleteMapping("/{externalId}")
-    public ResponseEntity<Void> deleteExpense(
-            @RequestHeader("X-User-Id") @NonNull String userId,
-            @PathVariable @NonNull String externalId
-    ) {
+    public ResponseEntity<Void> deleteExpense(@AuthenticationPrincipal String userId, @PathVariable @NonNull String externalId) {
         log.info("DELETE /api/v1/expenses/{} - userId: {}", externalId, userId);
-
         expenseService.deleteExpenseByExternalId(userId, externalId);
-
         log.info("Expense deleted successfully - externalId: {}", externalId);
         return ResponseEntity.noContent().build();
     }
@@ -199,9 +134,7 @@ public class ExpenseController {
      * Get financial summary for a user
      */
     @GetMapping("/summary")
-    public ResponseEntity<Summary> getSummary(
-            @RequestHeader("X-User-Id") @NonNull String userId
-    ) {
+    public ResponseEntity<Summary> getSummary(@AuthenticationPrincipal String userId) {
         log.info("GET /api/v1/expenses/summary - userId: {}", userId);
 
         Summary summary = expenseService.getSummary(userId);
@@ -212,55 +145,30 @@ public class ExpenseController {
 
 
     @GetMapping("/analytics/category")
-    public ResponseEntity<CategoryAnalyticsResponse>
-    getCategoryAnalytics(
-            @RequestHeader("X-User-Id")
-            String userId
-    )  {
+    public ResponseEntity<CategoryAnalyticsResponse> getCategoryAnalytics(@AuthenticationPrincipal String userId) {
 
         log.info("Getting analytics by category");
 //        Thread.sleep(60000);
-        return ResponseEntity.ok(
-                expenseService.getCategoryAnalytics(userId)
-        );
+        return ResponseEntity.ok(expenseService.getCategoryAnalytics(userId));
     }
 
     @GetMapping("/analytics/monthly")
-    public ResponseEntity<List<MonthlyAnalyticsDto>>
-    getMonthlyAnalytics(
-            @RequestHeader("X-User-Id")
-            String userId
-    ) {
-        return ResponseEntity.ok(
-                expenseService.getMonthlyAnalytics(userId)
-        );
+    public ResponseEntity<List<MonthlyAnalyticsDto>> getMonthlyAnalytics(@AuthenticationPrincipal String userId) {
+        return ResponseEntity.ok(expenseService.getMonthlyAnalytics(userId));
     }
 
 
     @PostMapping("/budgets")
-    public ResponseEntity<BudgetDto> createBudget(
-            @RequestHeader("X-User-Id") String userId,
-            @RequestBody BudgetDto dto
-    ) {
-        return ResponseEntity.ok(
-                budgetService.createBudget(userId, dto)
-        );
+    public ResponseEntity<BudgetDto> createBudget(@AuthenticationPrincipal String userId, @RequestBody BudgetDto dto) {
+        return ResponseEntity.ok(budgetService.createBudget(userId, dto));
     }
 
     @GetMapping("/budgets/status")
-    public ResponseEntity<List<BudgetStatusDto>>
-    getBudgetStatus(
-            @RequestHeader("X-User-Id") String userId,
+    public ResponseEntity<List<BudgetStatusDto>> getBudgetStatus(
+            @AuthenticationPrincipal String userId,
             @RequestParam int month,
-            @RequestParam int year
-    ) {
+            @RequestParam int year) {
         log.info("budget status");
-        return ResponseEntity.ok(
-                budgetService.getBudgetStatus(
-                        userId,
-                        month,
-                        year
-                )
-        );
+        return ResponseEntity.ok(budgetService.getBudgetStatus(userId, month, year));
     }
 }

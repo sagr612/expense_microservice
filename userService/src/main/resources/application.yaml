@@ -1,24 +1,32 @@
 spring:
   application:
     name: user-service
-
-  profiles:
-    active: dev
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  flyway:
+    enabled: true
+    baseline-on-migrate: true    # allow retrofit onto an existing DB (see Step 6)
+    baseline-version: 0
+    locations: classpath:db/migration
+    validate-on-migrate: true
 
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:userservice}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:123}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
 
   jpa:
-    show-sql: true
+    show-sql: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
 
 
   kafka:
-    bootstrap-servers: ${KAFKA_HOST:localhost}:${KAFKA_PORT:9092}
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+
     topic-user-deleted:
       name: user.deleted
     listener:
@@ -40,7 +48,7 @@ spring:
               mapping: auth:sagar.userService.dtos.UserInfoDto
 
     topic-json:
-      name: user_service
+      name: user.events
 
   servlet:
     multipart:
@@ -52,10 +60,10 @@ server:
 
 logging:
   level:
-    org.springframework.security: DEBUG
-    sagar.userService: DEBUG
+    org.springframework.security: INFO
+    sagar.userService: INFO
     org.springframework.web: INFO
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: WARN
 
 cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}
@@ -66,7 +74,7 @@ cloudinary:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
 
@@ -87,5 +95,8 @@ management:
       probability: 1.0
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
+
+jwt:
+  secret: ${JWT_SECRET}

@@ -30,6 +30,16 @@ ext {
 
 dependencies {
     // Core
+    testImplementation 'org.springframework.security:spring-security-test'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+
     implementation 'org.springframework.boot:spring-boot-starter'
     // For REST controllers (uncomment if you need web APIs)
     implementation 'org.springframework.boot:spring-boot-starter-web'

@@ -16,6 +16,10 @@ import sagar.userService.entities.UserInfo;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class UserInfoDto {
 
+/** Stable idempotency key across producer retries. Populated by AuthService's outbox publisher. */
+@Size(max = 100, message = "Event ID must not exceed 100 characters")
+private String eventId;
+
     @NotBlank(message = "User ID is required")
     @Size(max = 100, message = "User ID must not exceed 100 characters")
     private String userId;

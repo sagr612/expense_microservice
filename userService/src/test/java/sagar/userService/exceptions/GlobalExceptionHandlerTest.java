@@ -3,10 +3,14 @@ package sagar.userService.exceptions;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.validation.BindingResult;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
+import java.io.IOException;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -16,6 +20,34 @@ import static org.mockito.Mockito.when;
 class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+
+    @Test
+    void handleCloudinary_returns502_withGenericMessage() {
+        CloudinaryOperationException ex =
+                new CloudinaryOperationException("upload failed", new IOException("network"));
+
+        ResponseEntity<ErrorResponse> response = handler.handleCloudinary(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(response.getBody().getMessage())
+                .isEqualTo("Image storage service unavailable; please retry");
+        // must NOT leak internal cause
+        assertThat(response.getBody().getMessage()).doesNotContain("network");
+    }
+
+    @Test
+    void handleAuth_returns401() {
+        AuthenticationException ex = new BadCredentialsException("bad token");
+        ResponseEntity<ErrorResponse> response = handler.handleAuth(ex);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+    }
+
+    @Test
+    void handleAccessDenied_returns403() {
+        AccessDeniedException ex = new AccessDeniedException("nope");
+        ResponseEntity<ErrorResponse> response = handler.handleAccessDenied(ex);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    }
 
     @Test
     void handleIllegalArgument_returns400_withMessage() {

@@ -11,6 +11,7 @@ import sagar.userService.dtos.UserDeletedEvent;
 import sagar.userService.dtos.UserInfoDto;
 import sagar.userService.entities.OutboxEvent;
 import sagar.userService.entities.UserInfo;
+import sagar.userService.exceptions.DuplicateResourceException;
 import sagar.userService.producer.UserDeletedProducer;
 import sagar.userService.repository.OutboxRepository;
 import sagar.userService.repository.UserRepository;
@@ -44,14 +45,43 @@ public class UserWriteService {
     }
 
     @Transactional
+    public UserInfoDto createUserInternal(UserInfoDto dto) {
+        log.info("Creating user: {}", dto.getUserId());
+        userDomainService.validateUserDto(dto);
+        if (userRepository.findByUserId(dto.getUserId()).isPresent()) {
+            throw new DuplicateResourceException("User already exists: " + dto.getUserId());
+        }
+        UserInfo entity = userDomainService.createNewUser(dto);
+        UserInfo saved = userRepository.save(entity);
+        log.info("User created: {}", saved.getUserId());
+        return UserInfoDto.fromEntity(saved);
+    }
+
+    @Transactional
+    public UserInfoDto updateUserInternal(String userId, UserInfoDto dto) {
+        log.info("Updating user: {}", userId);
+        UserInfo existing = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
+        // Ignore any userId in the body; path is source of truth.
+        dto.setUserId(userId);
+        userDomainService.validateUserDto(dto);
+        UserInfo updated = userDomainService.updateExistingUser(existing, dto);
+        UserInfo saved = userRepository.save(updated);
+        log.info("User updated: {}", saved.getUserId());
+        return UserInfoDto.fromEntity(saved);
+    }
+
+
+
+    @Transactional
     public void deleteUserInternal(String userId) {
         log.info("Deleting user: {}", userId);
 
-            UserInfo userInfo = userRepository.findByUserId(userId)
-                    .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
+        UserInfo userInfo = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
 
-            userRepository.delete(userInfo);
-            log.info("User deleted successfully: {}", userId);
+        userRepository.delete(userInfo);
+        log.info("User deleted successfully: {}", userId);
         OutboxEvent event = OutboxEvent.builder()
                 .aggregateId(userId)
                 .eventType("USER_DELETED")
@@ -60,10 +90,6 @@ public class UserWriteService {
                 .build();
 
         outboxRepository.save(event);
-//            userDeletedProducer.publish(
-//                    UserDeletedEvent.builder()
-//                            .userId(userId)
-//                            .build());
     }
 
     private String toJson(Object obj) {
