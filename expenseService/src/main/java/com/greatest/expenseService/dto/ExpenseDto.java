@@ -19,6 +19,7 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ExpenseDto {
+//    private String eventId;
     //    @NotBlank(message = "External ID is required")
     @Size(max = 100, message = "External ID must not exceed 100 characters")
     private String externalId;

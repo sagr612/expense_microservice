@@ -4,7 +4,6 @@ import com.greatest.expenseService.dto.*;
 import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
-import com.greatest.expenseService.producer.ExpenseCreatedProducer;
 import com.greatest.expenseService.repository.ExpenseRepository;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,7 +22,6 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -39,7 +37,10 @@ class ExpenseServiceAdditionalTest {
     @Mock
     private ExpenseRepository expenseRepository;
     @Mock
-    private ExpenseCreatedProducer expenseCreatedProducer;
+    private com.greatest.expenseService.repository.OutboxRepository outboxRepository;
+
+    @Mock
+    private com.fasterxml.jackson.databind.ObjectMapper objectMapper;
 
     @InjectMocks
     private ExpenseService expenseService;

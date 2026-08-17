@@ -17,23 +17,12 @@ public class UserDeletedConsumer {
     @KafkaListener(
             topics = "user.deleted",
             groupId = "authService-group",
-            containerFactory =
-                    "userDeletedKafkaListenerContainerFactory"
+            containerFactory = "userDeletedKafkaListenerContainerFactory"
     )
     public void consume(UserDeletedEvent event) {
 
-        log.info(
-                "Received user deleted event for userId={}",
-                event.getUserId()
-        );
-
-        userCleanupService.deleteUserData(
-                event.getUserId()
-        );
-
-        log.info(
-                "Cleanup completed for userId={}",
-                event.getUserId()
-        );
+        log.info("Received user deleted event for userId={}", event.getUserId());
+        userCleanupService.deleteUserData(event.getUserId());
+        log.info("Cleanup completed for userId={}", event.getUserId());
     }
 }

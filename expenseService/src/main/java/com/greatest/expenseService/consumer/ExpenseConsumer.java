@@ -15,10 +15,7 @@ public class ExpenseConsumer {
 
     @KafkaListener(topics = "expense.create.request", groupId = "expenseService-group")
     public void listen(ExpenseDto e) {
-         log.info(
-                "Received expense event {}",
-                e.getExternalId()
-        );
+         log.info("Received expense event {}", e.getExternalId());
 
         expenseService.createExpense(e);
     }

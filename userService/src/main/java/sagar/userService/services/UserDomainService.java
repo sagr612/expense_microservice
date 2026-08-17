@@ -48,7 +48,7 @@ public class UserDomainService {
         return existingUser;
     }
 
-UserInfo createNewUser(UserInfoDto dto) {
+    UserInfo createNewUser(UserInfoDto dto) {
         if (userRepository.existsByEmail(dto.getEmail())) {
             throw new DuplicateResourceException("Email already in use: " + dto.getEmail());
         }

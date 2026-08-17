@@ -33,8 +33,7 @@ class ExpenseConsumerTest {
 
     @Test
     void listen_propagatesException_forContainerErrorHandlerToHandle() {
-        // listener has no try/catch, so failures must bubble up to the
-        // DefaultErrorHandler/retry+DLT pipeline configured in KafkaConsumerConfig
+
         ExpenseDto dto = ExpenseDto.builder().userId("user-1").externalId("FAIL_ME").build();
         when(expenseService.createExpense(dto)).thenThrow(new RuntimeException("downstream failure"));
 

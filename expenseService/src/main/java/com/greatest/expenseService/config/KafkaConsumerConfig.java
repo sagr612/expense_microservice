@@ -6,6 +6,7 @@ import com.greatest.expenseService.dto.UserDeletedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
@@ -40,19 +41,20 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "expenseService-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, ExpenseDeserializer.class);
-        // Don't commit the offset until the record is processed successfully
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
-    // ── Error handler: exponential backoff → DLT ──────────────────────────────
 
     @Bean
     public DefaultErrorHandler errorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
-        // Publishes to <original-topic>.DLT automatically (e.g. expense.created-dlt)
+    // Publishes to <original-topic>.DLT automatically (e.g. expense.created-dlt)
         // The failed record + exception info is attached as Kafka headers.
         DeadLetterPublishingRecoverer recoverer =
-                new DeadLetterPublishingRecoverer(kafkaTemplate);
+                new DeadLetterPublishingRecoverer(
+                        kafkaTemplate,
+                        (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
+                );
 
         // 3 attempts total: initial delivery + 2 retries
         // Waits 2s before retry 1, 4s before retry 2 (doubles each time, max 10s gap)
@@ -97,15 +99,8 @@ public class KafkaConsumerConfig {
     public ConsumerFactory<String, UserDeletedEvent>
     userDeletedConsumerFactory() {
 
-        Map<String, Object> props =
-                new HashMap<>(
-                        kafkaProperties
-                                .buildConsumerProperties()
-                );
-        props.put(
-                ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG,
-                false
-        );
+        Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
         JsonDeserializer<UserDeletedEvent>
                 deserializer =
                 new JsonDeserializer<>(

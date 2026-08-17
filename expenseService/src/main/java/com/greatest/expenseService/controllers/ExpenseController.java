@@ -1,6 +1,5 @@
 package com.greatest.expenseService.controllers;
 
-import com.greatest.expenseService.LogExecutionTime;
 import com.greatest.expenseService.dto.*;
 import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.ExpenseType;
@@ -8,6 +7,8 @@ import com.greatest.expenseService.services.BudgetService;
 import com.greatest.expenseService.services.ExpenseService;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -18,41 +19,36 @@ import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("api/v1/expenses")
 @RequiredArgsConstructor
 @Slf4j
+@Validated
 public class ExpenseController {
 
     private final ExpenseService expenseService;
     private final BudgetService budgetService;
+    private static final int MAX_PAGE_SIZE = 100;
 
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "createdAt",
+            "updatedAt",
+            "transactionDate",
+            "amount",
+            "title",
+            "currency",
+            "category",
+            "type"
+    );
 
-    //    @GetMapping
-//    public ResponseEntity<Page<ExpenseDto>> getExpenses(
-//                @RequestHeader("X-User-Id") @NonNull String userId,
-//            @RequestParam(defaultValue = "0") int page,
-//            @RequestParam(defaultValue = "10") int size,
-//            @RequestParam(defaultValue = "createdAt") String sortBy,
-//            @RequestParam(defaultValue = "false") boolean ascending
-//    ) {
-//        log.info("GET /api/v1/expenses - userId: {}, page: {}, size: {}", userId, page, size);
-//
-//        Sort sort = ascending ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-//        Pageable pageable = PageRequest.of(page, size, sort);
-//
-//        Page<ExpenseDto> expenses = expenseService.getExpenses(userId, pageable);
-//
-//        log.info("Retrieved {} expenses for userId: {}", expenses.getNumberOfElements(), userId);
-//        return ResponseEntity.ok(expenses);
-//    }
     @GetMapping
     public ResponseEntity<Page<ExpenseDto>>
     getExpenses(@AuthenticationPrincipal String userId,
@@ -62,53 +58,70 @@ public class ExpenseController {
                 @RequestParam(required = false) BigDecimal maxAmount,
                 @RequestParam(required = false) LocalDate fromDate,
                 @RequestParam(required = false) LocalDate toDate,
-                @RequestParam(defaultValue = "0") int page,
-                @RequestParam(defaultValue = "10") int size,
+                @RequestParam(defaultValue = "0")
+                @Min(value = 0, message = "Page must be greater than or equal to zero")
+                int page,
+                @RequestParam(defaultValue = "10")
+                @Min(value = 1, message = "Size must be at least 1")
+                @Max(value = 100, message = "Size must not exceed 100")
+                int size,
+
                 @RequestParam(defaultValue = "createdAt") String sortBy,
                 @RequestParam(defaultValue = "false") boolean ascending) {
-        Sort sort = ascending ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
+//        if (page < 0) {
+//            throw new IllegalArgumentException("Page must be greater than or equal to zero");
+//        }
+//
+//        if (size < 1 || size > MAX_PAGE_SIZE) {
+//            throw new IllegalArgumentException(
+//                    "Size must be between 1 and " + MAX_PAGE_SIZE
+//            );
+//        }
+
+        if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
+            throw new IllegalArgumentException(
+                    "Invalid sort field. Allowed values: " + ALLOWED_SORT_FIELDS
+            );
+        }
+
+        Sort sort = ascending
+                ? Sort.by(sortBy).ascending()
+                : Sort.by(sortBy).descending();
 
         Pageable pageable = PageRequest.of(page, size, sort);
+
 
         return ResponseEntity.ok(expenseService.searchExpenses(userId, category, type, minAmount, maxAmount, fromDate, toDate, pageable));
     }
 
-    /**
-     * Create a new expense
-     */
+
     @Operation(
             summary = "Create Expense",
             description = "Creates a new expense transaction"
     )
     @PostMapping
-    @LogExecutionTime
     public ResponseEntity<ExpenseDto> createExpense(@AuthenticationPrincipal String userId, @RequestBody @Valid ExpenseDto request) {
         log.info("POST /api/v1/expenses - userId: {}, externalId: {}", userId, request.getExternalId());
 
-        request.setUserId(userId); // Ensure userId from header is used
+        request.setUserId(userId);
         ExpenseDto created = expenseService.createExpense(request);
 
         log.info("Expense created successfully - id: {}", created.getExternalId());
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
-    /**
-     * Update an existing expense
-     */
+
     @PutMapping
     public ResponseEntity<ExpenseDto> updateExpense(@AuthenticationPrincipal String userId, @RequestBody @Valid ExpenseDto request) {
         log.info("PUT /api/v1/expenses - userId: {}, externalId: {}", userId, request.getExternalId());
 
-        request.setUserId(userId); // Ensure userId from header is used
+        request.setUserId(userId);
         ExpenseDto updated = expenseService.updateExpense(request);
 
         log.info("Expense updated successfully - externalId: {}", updated.getExternalId());
         return ResponseEntity.ok(updated);
     }
 
-    /**
-     * get an existing expense
-     */
     @GetMapping("/{externalId}")
     public ResponseEntity<ExpenseDto> getExpense(@AuthenticationPrincipal String userId, @PathVariable @NonNull String externalId) {
         log.info("get /api/v1/expenses/{} - userId: {}", externalId, userId);
@@ -119,9 +132,6 @@ public class ExpenseController {
         return ResponseEntity.ok(dto);
     }
 
-    /**
-     * Delete an expense by externalId
-     */
     @DeleteMapping("/{externalId}")
     public ResponseEntity<Void> deleteExpense(@AuthenticationPrincipal String userId, @PathVariable @NonNull String externalId) {
         log.info("DELETE /api/v1/expenses/{} - userId: {}", externalId, userId);
@@ -130,9 +140,7 @@ public class ExpenseController {
         return ResponseEntity.noContent().build();
     }
 
-    /**
-     * Get financial summary for a user
-     */
+
     @GetMapping("/summary")
     public ResponseEntity<Summary> getSummary(@AuthenticationPrincipal String userId) {
         log.info("GET /api/v1/expenses/summary - userId: {}", userId);
@@ -146,9 +154,7 @@ public class ExpenseController {
 
     @GetMapping("/analytics/category")
     public ResponseEntity<CategoryAnalyticsResponse> getCategoryAnalytics(@AuthenticationPrincipal String userId) {
-
         log.info("Getting analytics by category");
-//        Thread.sleep(60000);
         return ResponseEntity.ok(expenseService.getCategoryAnalytics(userId));
     }
 
@@ -159,7 +165,7 @@ public class ExpenseController {
 
 
     @PostMapping("/budgets")
-    public ResponseEntity<BudgetDto> createBudget(@AuthenticationPrincipal String userId, @RequestBody BudgetDto dto) {
+    public ResponseEntity<BudgetDto> createBudget(@AuthenticationPrincipal String userId, @RequestBody @Valid BudgetDto dto) {
         return ResponseEntity.ok(budgetService.createBudget(userId, dto));
     }
 

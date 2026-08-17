@@ -17,6 +17,7 @@ import sagar.userService.repository.OutboxRepository;
 import sagar.userService.repository.UserRepository;
 
 import java.util.List;
+import java.util.UUID;
 
 
 @Service
@@ -72,7 +73,6 @@ public class UserWriteService {
     }
 
 
-
     @Transactional
     public void deleteUserInternal(String userId) {
         log.info("Deleting user: {}", userId);
@@ -82,10 +82,14 @@ public class UserWriteService {
 
         userRepository.delete(userInfo);
         log.info("User deleted successfully: {}", userId);
+        UserDeletedEvent userDeletedEvent = UserDeletedEvent.builder()
+
+                .userId(userId)
+                .build();
         OutboxEvent event = OutboxEvent.builder()
                 .aggregateId(userId)
                 .eventType("USER_DELETED")
-                .payload(toJson(new UserDeletedEvent(userId)))
+                .payload(toJson(userDeletedEvent))
                 .published(false)
                 .build();
 

@@ -1,11 +1,9 @@
 package com.greatest.expenseService.services;
 
-import com.greatest.expenseService.LogExecutionTime;
 import com.greatest.expenseService.dto.*;
 import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
-import com.greatest.expenseService.producer.ExpenseCreatedProducer;
 import com.greatest.expenseService.repository.ExpenseRepository;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +15,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.greatest.expenseService.entities.OutboxEvent;
+import com.greatest.expenseService.repository.OutboxRepository;
+
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -30,7 +33,8 @@ import java.util.stream.Collectors;
 public class ExpenseService {
     private final BudgetAlertService budgetAlertService;
     private final ExpenseRepository expenseRepository;
-    private final ExpenseCreatedProducer expenseCreatedProducer;
+    private final OutboxRepository outboxRepository;
+    private final ObjectMapper objectMapper;
 
     private ExpenseDto convert(Expense e) {
         return ExpenseDto.builder()
@@ -44,10 +48,10 @@ public class ExpenseService {
                 .title(e.getTitle())
                 .note(e.getNote())
                 .version(e.getVersion())
+                .transactionDate(e.getTransactionDate())
                 .build();
     }
 
-    @LogExecutionTime
     public Page<ExpenseDto> getExpenses(@NonNull String userId, Pageable pageable) {
         log.debug("Fetching expenses for userId: {}, page: {}", userId, pageable.getPageNumber());
 
@@ -61,16 +65,22 @@ public class ExpenseService {
 //        if ("FAIL_ME".equals(req.getExternalId())) {
 //            throw new RuntimeException("Simulated processing failure");
 //        }
+//        externalId is an idempotency key per user.
+//                The client must generate a new UUID for every new expense.
+//                The client must reuse the same UUID only when retrying the same request.
 
         validateExpenseDto(req);
-        Optional<Expense> expense_exists = expenseRepository.findByUserIdAndExternalId(req.getUserId(), req.getExternalId());
+        String externalId = Strings.isNotBlank(req.getExternalId())
+                ? req.getExternalId()
+                : UUID.randomUUID().toString();
+
+        Optional<Expense> expense_exists = expenseRepository.findByUserIdAndExternalId(req.getUserId(), externalId);
         if (expense_exists.isPresent()) {
             return convert(expense_exists.get());
         }
 
-        String ext = UUID.randomUUID().toString();
         Expense expense = Expense.builder()
-                .externalId(ext)
+                .externalId(externalId)
                 .createdAt(Instant.now())
                 .amount(req.getAmount())
                 .currency(Strings.isNotBlank(req.getCurrency()) ? req.getCurrency() : "INR")
@@ -84,28 +94,35 @@ public class ExpenseService {
 
         Expense saved = expenseRepository.save(expense);
         log.info("Expense created - id: {}", saved.getId());
-        log.info("before budget check");
-//        try {
         budgetAlertService.checkBudget(saved);
-//        } catch (Exception e) {
-//            log.error("Budget check failed", e);
-//            throw e;
-//        }
-        log.info("After budget check");
+        ExpenseCreatedEvent event = ExpenseCreatedEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .userId(saved.getUserId())
+                .amount(saved.getAmount())
+                .category(saved.getCategory().name())
+                .externalId(saved.getExternalId())
+                .build();
 
-        ExpenseCreatedEvent event =
-                ExpenseCreatedEvent.builder()
-                        .userId(saved.getUserId())
-                        .amount(saved.getAmount())
-                        .category(saved.getCategory().name())
-                        .externalId(saved.getExternalId())
-                        .build();
+        OutboxEvent outboxEvent = OutboxEvent.builder()
 
-        expenseCreatedProducer.publish(event);
+                .aggregateId(saved.getUserId())
+                .eventType("EXPENSE_CREATED")
+                .payload(toJson(event))
+                .published(false)
+                .build();
+        outboxRepository.save(outboxEvent);
 
         return convert(saved);
 
     }
+    private String toJson(Object obj) {
+        try {
+            return objectMapper.writeValueAsString(obj);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Failed to serialize event for outbox: " + obj, e);
+        }
+    }
+
 
     @Transactional
     public ExpenseDto updateExpense(ExpenseDto req) {
@@ -171,15 +188,13 @@ public class ExpenseService {
                 .findByUserIdAndExternalId(userId, externalId)
                 .orElseThrow(() -> new IllegalArgumentException("Expense not found"));
 
-        ((JpaRepository<Expense, String>) expenseRepository).delete(expense);
+         expenseRepository.delete(expense);
         log.info("Expense deleted - id: {}", expense.getId());
     }
 
     public Summary getSummary(@NonNull String userId) {
         if (userId.isBlank()) {
-            log.error("User id is blank");
-            return null;
-
+            throw new IllegalArgumentException("User id is blank");
         }
 
         log.debug("Calculating summary for userId: {}", userId);
@@ -250,20 +265,12 @@ public class ExpenseService {
         );
     }
 
-    public List<MonthlyAnalyticsDto>
-    getMonthlyAnalytics(String userId) {
+    public List<MonthlyAnalyticsDto> getMonthlyAnalytics(String userId) {
         return expenseRepository
-                .getMonthlyAnalytics(
-                        userId,
-                        ExpenseType.EXPENSE
-                )
+                .getMonthlyAnalytics(userId, ExpenseType.EXPENSE)
                 .stream()
-                .map(row ->
-                        new MonthlyAnalyticsDto(
-                                ((Number) row[0]).intValue(),
-                                ((Number) row[1]).intValue(),
-                                (BigDecimal) row[2]
-                        ))
+                .map(row -> new MonthlyAnalyticsDto(((Number)
+                        row[0]).intValue(), ((Number) row[1]).intValue(), (BigDecimal) row[2]))
                 .toList();
     }
 

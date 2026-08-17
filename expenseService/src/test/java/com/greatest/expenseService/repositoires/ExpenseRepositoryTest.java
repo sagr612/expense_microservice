@@ -1,5 +1,6 @@
 package com.greatest.expenseService.repositoires;
 
+import com.greatest.expenseService.dto.SummaryProjection;
 import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
@@ -10,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -19,6 +21,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DataJpaTest
+@ActiveProfiles("test")
 class ExpenseRepositoryTest {
 
     @Autowired
@@ -123,4 +126,20 @@ class ExpenseRepositoryTest {
         assertThat(expenseRepository.countByUserId("user-1")).isZero();
         assertThat(expenseRepository.countByUserId("user-2")).isEqualTo(1L);
     }
+
+    @Test
+    void getSummaryByUserId_computesIncomeAndExpenditure_correctly() {
+        entityManager.persist(expense("user-1", "e1", BigDecimal.valueOf(500),
+                CategoryType.FOOD, ExpenseType.INCOME, LocalDate.now()));
+        entityManager.persist(expense("user-1", "e2", BigDecimal.valueOf(200),
+                CategoryType.FOOD, ExpenseType.EXPENSE, LocalDate.now()));
+        entityManager.flush();
+
+        SummaryProjection p = expenseRepository.getSummaryByUserId("user-1");
+
+        assertThat(p.getIncome()).isEqualByComparingTo(BigDecimal.valueOf(500));
+        assertThat(p.getExpenditure()).isEqualByComparingTo(BigDecimal.valueOf(200));
+        assertThat(p.getTotalTransactions()).isEqualTo(2L);
+    }
+
 }

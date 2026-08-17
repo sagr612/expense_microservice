@@ -52,18 +52,18 @@ public interface ExpenseRepository extends JpaRepository<Expense, String>, JpaSp
 
     @Query("""
             SELECT
-            EXTRACT(YEAR FROM e.createdAt),
-            EXTRACT(MONTH FROM e.createdAt),
+            EXTRACT(YEAR FROM e.transactionDate),
+            EXTRACT(MONTH FROM e.transactionDate),
             SUM(e.amount)
             FROM Expense e
             WHERE e.userId = :userId
             AND e.type = :type
             GROUP BY
-            EXTRACT(YEAR FROM e.createdAt),
-            EXTRACT(MONTH FROM e.createdAt)
+            EXTRACT(YEAR FROM e.transactionDate),
+            EXTRACT(MONTH FROM e.transactionDate)
             ORDER BY
-            EXTRACT(YEAR FROM e.createdAt),
-            EXTRACT(MONTH FROM e.createdAt)
+            EXTRACT(YEAR FROM e.transactionDate),
+            EXTRACT(MONTH FROM e.transactionDate)
             """)
     List<Object[]> getMonthlyAnalytics(
             String userId,

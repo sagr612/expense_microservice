@@ -5,21 +5,30 @@ spring:
   application:
     name: expense-service
 
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
+    validate-on-migrate: true
+
   datasource:
     driver-class-name: org.postgresql.Driver
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:expenseservice}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:123}
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
 
   jpa:
-    show-sql: true
+    show-sql: false
     hibernate:
-      ddl-auto: update
+      ddl-auto: validate
     properties:
       hibernate:
-        format_sql: true
+        format_sql: false
 
   kafka:
+    producer:
+      observation-enabled: true
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
     topic-budget-alert:
       name: budget-alerts
@@ -56,7 +65,7 @@ logging:
 eureka:
   client:
     service-url:
-      defaultZone: http://localhost:8761/eureka/
+      defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
 
@@ -91,5 +100,5 @@ management:
         enabled: false
   zipkin:
     tracing:
-      endpoint: http://localhost:9411/api/v2/spans
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 

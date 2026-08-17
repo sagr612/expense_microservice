@@ -9,7 +9,7 @@ import java.math.BigDecimal;
 @NoArgsConstructor
 @AllArgsConstructor
 public class ExpenseCreatedEvent {
-
+private String eventId;
     private String userId;
 
     private BigDecimal amount;

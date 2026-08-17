@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 @AllArgsConstructor
 @NoArgsConstructor
 public class BudgetAlertEvent {
-
+private String eventId;
     private String userId;
 
     private String category;

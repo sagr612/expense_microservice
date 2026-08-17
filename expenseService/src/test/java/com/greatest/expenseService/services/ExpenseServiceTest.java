@@ -1,10 +1,10 @@
 package com.greatest.expenseService.services;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.greatest.expenseService.dto.*;
 import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
-import com.greatest.expenseService.producer.ExpenseCreatedProducer;
 import com.greatest.expenseService.repository.ExpenseRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +20,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Optional;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.greatest.expenseService.entities.OutboxEvent;
+import com.greatest.expenseService.repository.OutboxRepository;
+
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -34,7 +38,10 @@ class ExpenseServiceTest {
     @Mock
     private ExpenseRepository expenseRepository;
     @Mock
-    private ExpenseCreatedProducer expenseCreatedProducer;
+    private OutboxRepository outboxRepository;
+
+    @Mock
+    private ObjectMapper objectMapper;
 
     @InjectMocks
     private ExpenseService expenseService;
@@ -69,6 +76,8 @@ class ExpenseServiceTest {
     @Nested
     class CreateExpense {
 
+
+
         @Test
         void createsExpense_andPublishesEvent_whenNotDuplicate() {
             ExpenseDto dto = validDto();
@@ -83,7 +92,8 @@ class ExpenseServiceTest {
             assertThat(result.getAmount()).isEqualTo(BigDecimal.valueOf(100));
 
             verify(budgetAlertService).checkBudget(any(Expense.class));
-            verify(expenseCreatedProducer).publish(any(ExpenseCreatedEvent.class));
+            verify(outboxRepository).save(any(OutboxEvent.class));
+
         }
 
         @Test
@@ -99,7 +109,8 @@ class ExpenseServiceTest {
             assertThat(result.getExternalId()).isEqualTo(dto.getExternalId());
             verify(expenseRepository, never()).save(any());
             verify(budgetAlertService, never()).checkBudget(any());
-            verify(expenseCreatedProducer, never()).publish(any());
+            verify(outboxRepository, never()).save(any());
+
         }
 
         @Test
@@ -118,11 +129,62 @@ class ExpenseServiceTest {
 
             assertThat(captor.getValue().getCurrency()).isEqualTo("INR");
         }
+        @Test
+        void createsExpenseCreatedOutboxEvent() throws JsonProcessingException {
+            ExpenseDto dto = validDto();
+
+            when(expenseRepository.findByUserIdAndExternalId(any(), any()))
+                    .thenReturn(Optional.empty());
+
+            when(expenseRepository.save(any(Expense.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            when(objectMapper.writeValueAsString(any()))
+                    .thenReturn("""
+                    {"userId":"user-1","category":"FOOD","externalId":"ext-1"}
+                    """);
+
+            expenseService.createExpense(dto);
+
+            ArgumentCaptor<OutboxEvent> captor =
+                    ArgumentCaptor.forClass(OutboxEvent.class);
+
+            verify(outboxRepository).save(captor.capture());
+
+            OutboxEvent outboxEvent = captor.getValue();
+
+            assertThat(outboxEvent.getAggregateId()).isEqualTo("user-1");
+            assertThat(outboxEvent.getEventType()).isEqualTo("EXPENSE_CREATED");
+            assertThat(outboxEvent.getPayload())
+                    .contains("\"userId\":\"user-1\"")
+                    .contains("\"category\":\"FOOD\"")
+                    .contains("\"externalId\":\"ext-1\"");
+        }
 
         @Test
-        void generatesNewExternalId_ratherThanReusingRequestExternalId() {
-            // ExpenseService.createExpense always generates a fresh UUID for the entity's
-            // externalId rather than trusting the one on the incoming DTO
+        void generatesExternalId_whenRequestExternalIdIsBlank() {
+            ExpenseDto dto = validDto();
+            dto.setExternalId(null);
+
+            when(expenseRepository.findByUserIdAndExternalId(any(), any()))
+                    .thenReturn(Optional.empty());
+
+            when(expenseRepository.save(any(Expense.class)))
+                    .thenAnswer(invocation -> invocation.getArgument(0));
+
+            ArgumentCaptor<Expense> captor =
+                    ArgumentCaptor.forClass(Expense.class);
+
+            expenseService.createExpense(dto);
+
+            verify(expenseRepository).save(captor.capture());
+
+            assertThat(captor.getValue().getExternalId())
+                    .isNotBlank();
+        }
+
+        @Test
+        void reusesRequestExternalId_whenProvided() {
             ExpenseDto dto = validDto();
 
             when(expenseRepository.findByUserIdAndExternalId(any(), any()))
@@ -134,26 +196,57 @@ class ExpenseServiceTest {
 
             expenseService.createExpense(dto);
 
-            assertThat(captor.getValue().getExternalId()).isNotEqualTo(dto.getExternalId());
+            assertThat(captor.getValue().getExternalId()).isEqualTo(dto.getExternalId());
             assertThat(captor.getValue().getExternalId()).isNotBlank();
         }
 
         @Test
-        void publishesEvent_withSavedExpenseDetails() {
+        void publishesEvent_withSavedExpenseDetails() throws JsonProcessingException {
             ExpenseDto dto = validDto();
             when(expenseRepository.findByUserIdAndExternalId(any(), any()))
                     .thenReturn(Optional.empty());
             when(expenseRepository.save(any(Expense.class)))
                     .thenAnswer(i -> i.getArgument(0));
-
+            when(objectMapper.writeValueAsString(any()))
+                    .thenReturn("""
+                    {"userId":"user-1","category":"FOOD","externalId":"ext-1"}
+                    """);
             expenseService.createExpense(dto);
 
-            ArgumentCaptor<ExpenseCreatedEvent> captor = ArgumentCaptor.forClass(ExpenseCreatedEvent.class);
-            verify(expenseCreatedProducer).publish(captor.capture());
+            ArgumentCaptor<OutboxEvent> captor =
+                    ArgumentCaptor.forClass(OutboxEvent.class);
 
-            assertThat(captor.getValue().getUserId()).isEqualTo("user-1");
-            assertThat(captor.getValue().getCategory()).isEqualTo("FOOD");
+            verify(outboxRepository).save(captor.capture());
+
+            assertThat(captor.getValue().getAggregateId())
+                    .isEqualTo("user-1");
+
+            assertThat(captor.getValue().getEventType())
+                    .isEqualTo("EXPENSE_CREATED");
+
+            assertThat(captor.getValue().getPayload())
+                    .contains("\"userId\":\"user-1\"")
+                    .contains("\"category\":\"FOOD\"");
+
         }
+        @Test
+        void throwsIllegalArgument_whenAmountIsNull() {
+            ExpenseDto dto = validDto();
+            dto.setAmount(null);
+            assertThatThrownBy(() -> expenseService.createExpense(dto))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("Amount");
+        }
+
+        @Test
+        void throwsIllegalArgument_whenTransactionDateIsNull() {
+            ExpenseDto dto = validDto();
+            dto.setTransactionDate(null);
+            assertThatThrownBy(() -> expenseService.createExpense(dto))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("date");
+        }
+
     }
 
     @Nested
@@ -271,11 +364,14 @@ class ExpenseServiceTest {
     @Nested
     class GetSummary {
 
-        @Test
-        void returnsNull_whenUserIdBlank() {
-            assertThat(expenseService.getSummary(" ")).isNull();
-            verifyNoInteractions(expenseRepository);
-        }
+      @Test
+void throwsIllegalArgument_whenUserIdBlank() {
+    assertThatThrownBy(() -> expenseService.getSummary(" "))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("blank");
+    verifyNoInteractions(expenseRepository);
+}
+
 
         @Test
         void computesBalance_asIncomeMinusExpenditure() {

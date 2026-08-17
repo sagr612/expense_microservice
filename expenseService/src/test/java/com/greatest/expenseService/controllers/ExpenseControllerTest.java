@@ -11,23 +11,33 @@ import io.micrometer.tracing.TraceContext;
 import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(ExpenseController.class)
+//@AutoConfigureMockMvc(addFilters = false)
+//@WithMockUser(username = "user-1", roles = "USER")
 class ExpenseControllerTest {
 
     @Autowired
@@ -42,8 +52,13 @@ class ExpenseControllerTest {
     @MockitoBean
     BudgetService budgetService;
 
-    @MockitoBean
-    Tracer tracer;
+    private Authentication userAuth(String userId) {
+        return new UsernamePasswordAuthenticationToken(
+                userId,
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+        );
+    }
 
     private ExpenseDto validDto() {
         return ExpenseDto.builder()
@@ -54,7 +69,37 @@ class ExpenseControllerTest {
                 .type(ExpenseType.EXPENSE)
                 .category(CategoryType.FOOD)
                 .title("Lunch")
+                .transactionDate(LocalDate.of(2026, 6, 15))
+
                 .build();
+    }
+
+    @Test
+    void rejectsNegativePage() throws Exception {
+        mockMvc.perform(get("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .param("page", "-1"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(expenseService);
+    }
+    @Test
+    void rejectsZeroPageSize() throws Exception {
+        mockMvc.perform(get("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .param("size", "0"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(expenseService);
+    }
+    @Test
+    void rejectsInvalidSortField() throws Exception {
+        mockMvc.perform(get("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .param("sortBy", "password"))
+                .andExpect(status().isBadRequest());
+
+        verifyNoInteractions(expenseService);
     }
 
     //---------------------------------------------------------
@@ -67,6 +112,8 @@ class ExpenseControllerTest {
         when(expenseService.createExpense(any(ExpenseDto.class))).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -82,6 +129,8 @@ class ExpenseControllerTest {
         dto.setAmount(null);
 
         mockMvc.perform(post("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -98,7 +147,9 @@ class ExpenseControllerTest {
         when(expenseService.createExpense(any(ExpenseDto.class))).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1")
+                        .with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated());
@@ -118,6 +169,8 @@ class ExpenseControllerTest {
         when(expenseService.updateExpense(any(ExpenseDto.class))).thenReturn(dto);
 
         mockMvc.perform(put("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -131,6 +184,8 @@ class ExpenseControllerTest {
                 .thenThrow(new IllegalArgumentException("Expense not found"));
 
         mockMvc.perform(put("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(validDto())))
@@ -146,6 +201,7 @@ class ExpenseControllerTest {
         when(expenseService.getExpense("user-1", "ext-1")).thenReturn(validDto());
 
         mockMvc.perform(get("/api/v1/expenses/ext-1")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.externalId").value("ext-1"));
@@ -157,6 +213,7 @@ class ExpenseControllerTest {
                 .thenThrow(new IllegalArgumentException("Expense not found"));
 
         mockMvc.perform(get("/api/v1/expenses/missing")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isBadRequest());
     }
@@ -168,6 +225,8 @@ class ExpenseControllerTest {
     @Test
     void shouldDeleteExpense_andReturnNoContent() throws Exception {
         mockMvc.perform(delete("/api/v1/expenses/ext-1")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isNoContent());
 
@@ -191,6 +250,7 @@ class ExpenseControllerTest {
         when(expenseService.getSummary("user-1")).thenReturn(summary);
 
         mockMvc.perform(get("/api/v1/expenses/summary")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.balance").value(600));
@@ -207,6 +267,8 @@ class ExpenseControllerTest {
         when(expenseService.getCategoryAnalytics("user-1")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/expenses/analytics/category")
+                        .with(authentication(userAuth("user-1")))
+
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.analytics.FOOD").value(500));
@@ -218,6 +280,7 @@ class ExpenseControllerTest {
                 .thenReturn(List.of(new MonthlyAnalyticsDto(2026, 6, BigDecimal.valueOf(750))));
 
         mockMvc.perform(get("/api/v1/expenses/analytics/monthly")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].month").value(6));
@@ -235,6 +298,8 @@ class ExpenseControllerTest {
         when(budgetService.createBudget("user-1", dto)).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/expenses/budgets")
+                        .with(authentication(userAuth("user-1")))
+                        .with(csrf())
                         .header("X-User-Id", "user-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(dto)))
@@ -254,6 +319,7 @@ class ExpenseControllerTest {
         when(budgetService.getBudgetStatus("user-1", 6, 2026)).thenReturn(List.of(status));
 
         mockMvc.perform(get("/api/v1/expenses/budgets/status")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1")
                         .param("month", "6")
                         .param("year", "2026"))
@@ -272,6 +338,7 @@ class ExpenseControllerTest {
                 .thenReturn(new PageImpl<>(List.of(validDto()), PageRequest.of(0, 10), 1));
 
         mockMvc.perform(get("/api/v1/expenses")
+                        .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1")
                         .param("category", "FOOD"))
                 .andExpect(status().isOk())

@@ -17,19 +17,9 @@ public class UserCleanupService {
 
     @Transactional
     public void deleteUserData(String userId) {
-
-        log.info(
-                "Deleting data for user {}",
-                userId
-        );
-
+        log.info("Deleting data for user {}", userId);
         expenseRepository.deleteByUserId(userId);
-
         budgetRepository.deleteByUserId(userId);
-
-        log.info(
-                "Successfully deleted all data for user {}",
-                userId
-        );
+        log.info("Successfully deleted all data for user {}", userId);
     }
 }

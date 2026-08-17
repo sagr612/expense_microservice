@@ -34,7 +34,7 @@ public class Expense {
     private Long version;
     @Column(nullable = false)
     private LocalDate transactionDate;
-    @Column(nullable = false, unique = true)
+    @Column(nullable = false)
     private String externalId;
 
     @Column(nullable = false)
@@ -68,11 +68,4 @@ public class Expense {
     @UpdateTimestamp
     private Instant updatedAt;
 
-    @PrePersist
-    @PreUpdate
-    private void generateExternalId(){
-        if(this.externalId== null){
-            this.externalId= UUID.randomUUID().toString();
-        }
-    }
 }

@@ -28,6 +28,7 @@ class ExpenseSpecificationTest {
 
     private Expense expense(String userId, CategoryType category, ExpenseType type, BigDecimal amount, LocalDate date) {
         return Expense.builder()
+                .externalId(java.util.UUID.randomUUID().toString())
                 .userId(userId).category(category).type(type)
                 .amount(amount).currency("INR").title("t")
                 .transactionDate(date)

@@ -36,6 +36,7 @@ class BudgetServiceTest {
     @Nested
     class CreateBudget {
 
+
         @Test
         void createsNewBudget_whenNoneExistsForUserCategoryMonthYear() {
             BudgetDto dto = BudgetDto.builder()

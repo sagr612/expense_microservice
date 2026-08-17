@@ -37,7 +37,7 @@ class ExpenseDltConsumerTest {
     @Test
     void shouldSaveFailedEvent() {
 
-        ConsumerRecord<String, ExpenseDto> record = new ConsumerRecord<>("expense.create.request-dlt", 0, 15L, "key", expenseDto);
+        ConsumerRecord<String, ExpenseDto> record = new ConsumerRecord<>("expense.create.request.DLT", 0, 15L, "key", expenseDto);
 
         String originalTopic = "expense.create.request";
         int partition = 0;

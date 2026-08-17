@@ -32,7 +32,7 @@ public class ExpenseDltConsumer {
     private final FailedEventService failedEventService;
 
     @KafkaListener(
-            topics = "expense.create.request-dlt",
+            topics = "expense.create.request.DLT",
             groupId = "expenseService-dlt-group",
             containerFactory = "kafkaListenerContainerFactory"
     )

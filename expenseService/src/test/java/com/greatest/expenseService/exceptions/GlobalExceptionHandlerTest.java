@@ -2,6 +2,8 @@ package com.greatest.expenseService.exceptions;
 
 import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,6 +14,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -47,6 +50,22 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getValidationErrors())
                 .containsEntry("amount", "Amount cannot be null");
     }
+    @Test
+    void handleConstraintViolation_returns400_withParamName() {
+        ConstraintViolationException ex = mock(ConstraintViolationException.class);
+        ConstraintViolation<?> violation = mock(ConstraintViolation.class);
+        jakarta.validation.Path path = mock(jakarta.validation.Path.class);
+
+        when(path.toString()).thenReturn("getExpenses.page");
+        when(violation.getPropertyPath()).thenReturn(path);
+        when(violation.getMessage()).thenReturn("must be >= 0");
+        when(ex.getConstraintViolations()).thenReturn(Set.of(violation));
+
+        ResponseEntity<ErrorResponse> response = handler.handleConstraintViolation(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody().getValidationErrors()).containsKey("page");
+    }
 
     @Test
     void handleOptimisticLockException_returns500_withGenericMessage() {
@@ -55,7 +74,8 @@ class GlobalExceptionHandlerTest {
 
         ResponseEntity<ErrorResponse> response = handler.handleOptimisticLockException(ex);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
         assertThat(response.getBody().getMessage())
                 .isEqualTo("Expense was modified by another transaction");
     }
