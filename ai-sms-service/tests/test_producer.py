@@ -1,16 +1,27 @@
 # tests/test_producer.py
-"""Unit tests for the Kafka producer."""
 from unittest.mock import MagicMock, patch
-
-# Patch KafkaProducer before importing the module so the module-level
-# `producer = KafkaProducer(...)` call doesn't attempt a real connection.
-with patch("kafka.KafkaProducer"):
-    from app.kafka_client.producer import publish_expense_event
+from kafka.errors import KafkaTimeoutError
+from app.kafka_client.producer import publish_expense_event
 
 
-@patch("app.kafka_client.producer.producer")
-def test_publish_expense_event_sends_with_user_key(mock_producer):
-    """publish_expense_event should send to the topic with userId as key."""
+def _make_success_future(topic="expense.create.request", partition=0, offset=42):
+    """Build a Future-like mock whose .get() returns RecordMetadata-like data."""
+    metadata = MagicMock()
+    metadata.topic = topic
+    metadata.partition = partition
+    metadata.offset = offset
+
+    future = MagicMock()
+    future.get.return_value = metadata
+    return future
+
+
+@patch("app.kafka_client.producer._get_producer")
+def test_publish_expense_event_returns_true_on_success(mock_get_producer):
+    mock_producer = MagicMock()
+    mock_producer.send.return_value = _make_success_future()
+    mock_get_producer.return_value = mock_producer
+
     event = {
         "externalId": "sms-abc123",
         "userId": "user-42",
@@ -23,24 +34,56 @@ def test_publish_expense_event_sends_with_user_key(mock_producer):
         "transactionDate": "2026-08-05",
     }
 
-    publish_expense_event(event)
+    result = publish_expense_event(event)
 
+    assert result is True
     mock_producer.send.assert_called_once_with(
         "expense.create.request",
         key="user-42",
         value=event,
     )
-    mock_producer.flush.assert_called_once()
+    # future.get should have been called with a positive timeout
+    mock_producer.send.return_value.get.assert_called_once()
+    _, kwargs = mock_producer.send.return_value.get.call_args
+    assert kwargs.get("timeout", 0) > 0
 
 
-@patch("app.kafka_client.producer.producer")
-def test_publish_expense_event_sends_different_user(mock_producer):
-    """Ensure the key changes with different userIds."""
+@patch("app.kafka_client.producer._get_producer")
+def test_publish_expense_event_returns_false_on_kafka_error(mock_get_producer):
+    """Broker/timeout errors must not lie to the caller."""
+    mock_producer = MagicMock()
+    future = MagicMock()
+    future.get.side_effect = KafkaTimeoutError("broker unresponsive")
+    mock_producer.send.return_value = future
+    mock_get_producer.return_value = mock_producer
+
+    result = publish_expense_event({"userId": "user-7", "amount": 100.0})
+
+    assert result is False
+
+
+@patch("app.kafka_client.producer._get_producer")
+def test_publish_expense_event_returns_false_on_unexpected_exception(mock_get_producer):
+    """Any unexpected exception must be swallowed, logged, and reported as failure."""
+    mock_producer = MagicMock()
+    future = MagicMock()
+    future.get.side_effect = ValueError("something weird")
+    mock_producer.send.return_value = future
+    mock_get_producer.return_value = mock_producer
+
+    result = publish_expense_event({"userId": "user-9", "amount": 50.0})
+
+    assert result is False
+
+
+@patch("app.kafka_client.producer._get_producer")
+def test_publish_expense_event_uses_userid_as_key(mock_get_producer):
+    """Message key partitions events per user — critical for ordering guarantees."""
+    mock_producer = MagicMock()
+    mock_producer.send.return_value = _make_success_future()
+    mock_get_producer.return_value = mock_producer
+
     publish_expense_event({"userId": "user-7", "amount": 100.0})
 
-    mock_producer.send.assert_called_once_with(
-        "expense.create.request",
-        key="user-7",
-        value={"userId": "user-7", "amount": 100.0},
-    )
-    mock_producer.flush.assert_called_once()
+    call = mock_producer.send.call_args
+    assert call.kwargs["key"] == "user-7"

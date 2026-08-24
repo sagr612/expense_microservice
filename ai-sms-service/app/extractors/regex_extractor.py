@@ -4,7 +4,11 @@ import re
 VPA_PATTERN = re.compile(r"VPA\s+([a-zA-Z0-9.\-_]+)@", re.IGNORECASE)
 MERCHANT_PATTERN = re.compile(r"\b(?:at|to|from)\s+([A-Z][A-Za-z0-9&\s]{2,30}?)(?:[.,]|\son|\svia|\bRef)", re.IGNORECASE)
 
-AMOUNT_PATTERN = re.compile(r"(?:Rs\.?|INR)\s?([\d,]+\.?\d*)", re.IGNORECASE)
+AMOUNT_PATTERN = re.compile(
+    r"(?:debited|credited|spent|paid|received|transferred)?\s*(?:by|of)?\s*"
+    r"(?:Rs\.?|INR|₹)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?!\d)",
+    re.IGNORECASE,
+)
 
 CATEGORY_KEYWORDS = {
     # ---------- EXPENSE CATEGORIES ----------

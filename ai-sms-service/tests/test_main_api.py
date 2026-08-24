@@ -1,15 +1,13 @@
 # tests/test_main_api.py
 """API endpoint tests for the ai-sms-service FastAPI app."""
-from unittest.mock import patch
+from unittest.mock import patch, AsyncMock
 
 import pytest
 
 # --- Module-level mocks so importing app.main does not attempt real connections ---
-# Patch the source modules BEFORE app.main is imported, otherwise the real
-# setup_tracing()/instrument_app()/Instrumentator() run during import and
-# spawn background threads that try to reach Zipkin/Prometheus.
-with patch("kafka.KafkaProducer"), \
-     patch("app.tracing.setup_tracing"), \
+# Patch BEFORE app.main is imported so setup_tracing()/instrument_app() don't
+# spawn background threads trying to reach Zipkin/Prometheus.
+with patch("app.tracing.setup_tracing"), \
      patch("opentelemetry.instrumentation.fastapi.FastAPIInstrumentor.instrument_app"), \
      patch("prometheus_fastapi_instrumentator.Instrumentator"):
     from app.main import app
@@ -17,12 +15,39 @@ with patch("kafka.KafkaProducer"), \
 from fastapi.testclient import TestClient
 
 
+from app.auth import get_current_user_id
+
+
 @pytest.fixture()
 def client():
-    """Provide a TestClient with Eureka registration stubbed out."""
+    """Provide a TestClient with Eureka and JWT auth stubbed out.
+    Auth always returns 'user-123'.
+    """
+    app.dependency_overrides[get_current_user_id] = lambda: "user-123"
     with patch("app.main.register_with_eureka"):
         with TestClient(app) as test_client:
             yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client_user456():
+    """Like client but auth returns 'user-456'."""
+    app.dependency_overrides[get_current_user_id] = lambda: "user-456"
+    with patch("app.main.register_with_eureka"):
+        with TestClient(app) as test_client:
+            yield test_client
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture()
+def client_factory():
+    """Returns a factory to create a client with any user_id."""
+    def _make(user_id: str):
+        app.dependency_overrides[get_current_user_id] = lambda: user_id
+        return TestClient(app)
+    yield _make
+    app.dependency_overrides.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -30,9 +55,10 @@ def client():
 # ---------------------------------------------------------------------------
 
 def test_health_returns_up(client):
-    response = client.get("/actuator/health")
+    with patch("app.main.check_kafka_health", return_value={"status": "UP"}):
+        response = client.get("/actuator/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "UP"}
+    assert response.json()["status"] == "UP"
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +66,8 @@ def test_health_returns_up(client):
 # ---------------------------------------------------------------------------
 
 def test_classify_irrelevant_returns_auto_created_false(client):
-    with patch("app.main.classify_sms", return_value={"label": "irrelevant", "confidence": 0.95}):
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "irrelevant", "confidence": 0.95}):
         response = client.post(
             "/api/v1/sms/classify",
             json={"smsText": "Your OTP is 123456"},
@@ -56,7 +83,8 @@ def test_classify_irrelevant_returns_auto_created_false(client):
 
 
 def test_classify_expense_no_amount_returns_auto_created_false(client):
-    with patch("app.main.classify_sms", return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
          patch("app.main.extract_amount", return_value=None):
         response = client.post(
             "/api/v1/sms/classify",
@@ -72,7 +100,8 @@ def test_classify_expense_no_amount_returns_auto_created_false(client):
 
 
 def test_classify_expense_below_threshold_no_kafka_publish(client):
-    with patch("app.main.classify_sms", return_value={"label": "expense", "confidence": 0.80, "category": "FOOD"}), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.80, "category": "FOOD"}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Swiggy"), \
          patch("app.main.guess_category", return_value="BILLS"), \
@@ -95,11 +124,12 @@ def test_classify_expense_below_threshold_no_kafka_publish(client):
 
 
 def test_classify_expense_above_threshold_publishes_kafka(client):
-    with patch("app.main.classify_sms", return_value={"label": "expense", "confidence": 0.95, "category": "FOOD"}), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.95, "category": "FOOD"}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Swiggy"), \
          patch("app.main.guess_category", return_value="FOOD"), \
-         patch("app.main.publish_expense_event") as mock_publish:
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
         response = client.post(
             "/api/v1/sms/classify",
@@ -124,17 +154,17 @@ def test_classify_expense_above_threshold_publishes_kafka(client):
     mock_publish.assert_called_once()
 
 
-def test_classify_income_above_threshold_publishes_kafka(client):
-    with patch("app.main.classify_sms", return_value={"label": "income", "confidence": 0.97, "category": "OTHERS"}), \
+def test_classify_income_above_threshold_publishes_kafka(client_user456):
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "income", "confidence": 0.97, "category": "OTHERS"}), \
          patch("app.main.extract_amount", return_value=5000.0), \
          patch("app.main.extract_merchant", return_value=None), \
          patch("app.main.guess_category", return_value="OTHERS"), \
-         patch("app.main.publish_expense_event") as mock_publish:
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
-        response = client.post(
+        response = client_user456.post(
             "/api/v1/sms/classify",
             json={"smsText": "Rs. 5000 credited to your account"},
-            headers={"x-user-id": "user-456"},
         )
 
     assert response.status_code == 200
@@ -147,43 +177,53 @@ def test_classify_income_above_threshold_publishes_kafka(client):
 
 
 def test_classify_external_id_is_deterministic(client):
-    """Same user + same SMS must produce the same externalId."""
-    with patch("app.main.classify_sms", return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
+    """Same user + same SMS + no timestamp must produce the same externalId."""
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
          patch("app.main.extract_amount", return_value=100.0), \
          patch("app.main.extract_merchant", return_value=None), \
          patch("app.main.guess_category", return_value="OTHERS"), \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True):
 
         payload = {"smsText": "Rs. 100 debited from HDFC Bank"}
 
-        r1 = client.post("/api/v1/sms/classify", json=payload, headers={"x-user-id": "user-1"}).json()
-        r2 = client.post("/api/v1/sms/classify", json=payload, headers={"x-user-id": "user-1"}).json()
+        # Same user (mocked as 'user-123'), same text → same hash both times
+        r1 = client.post("/api/v1/sms/classify", json=payload).json()
+        r2 = client.post("/api/v1/sms/classify", json=payload).json()
 
     assert r1["event"]["externalId"] == r2["event"]["externalId"]
 
 
-def test_classify_external_id_differs_by_user(client):
+def test_classify_external_id_differs_by_user(client_factory):
     """Different users submitting the same SMS must get different externalIds."""
-    with patch("app.main.classify_sms", return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
+    payload = {"smsText": "Rs. 100 debited from HDFC Bank"}
+
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.99, "category": "OTHERS"}), \
          patch("app.main.extract_amount", return_value=100.0), \
          patch("app.main.extract_merchant", return_value=None), \
          patch("app.main.guess_category", return_value="OTHERS"), \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True):
 
-        payload = {"smsText": "Rs. 100 debited from HDFC Bank"}
+        # Two separate clients authenticated as different users
+        with patch("app.main.register_with_eureka"):
+            app.dependency_overrides[get_current_user_id] = lambda: "user-1"
+            with TestClient(app) as c1:
+                r1 = c1.post("/api/v1/sms/classify", json=payload).json()
 
-        r1 = client.post("/api/v1/sms/classify", json=payload, headers={"x-user-id": "user-1"}).json()
-        r2 = client.post("/api/v1/sms/classify", json=payload, headers={"x-user-id": "user-2"}).json()
+            app.dependency_overrides[get_current_user_id] = lambda: "user-2"
+            with TestClient(app) as c2:
+                r2 = c2.post("/api/v1/sms/classify", json=payload).json()
 
     assert r1["event"]["externalId"] != r2["event"]["externalId"]
 
 
 def test_classify_missing_required_header_returns_422(client):
-    with patch("app.main.classify_sms", return_value={"label": "irrelevant", "confidence": 0.9}):
-        response = client.post(
-            "/api/v1/sms/classify",
-            json={"smsText": "Hello"},
-        )
+    """Missing smsText body field returns 422 regardless of auth."""
+    response = client.post(
+        "/api/v1/sms/classify",
+        json={},  # missing smsText
+    )
 
     assert response.status_code == 422
 
@@ -209,13 +249,12 @@ def test_classify_invalid_payload_wrong_type(client):
 
 def test_classify_uses_llm_category_when_provided(client):
     """When LLM returns a valid category (not OTHERS), it should be used."""
-    with patch("app.main.classify_sms", return_value={
-             "label": "expense", "confidence": 0.95, "category": "FOOD"
-         }), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.95, "category": "FOOD"}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Starbucks"), \
          patch("app.main.guess_category") as mock_guess_category, \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
         response = client.post(
             "/api/v1/sms/classify",
@@ -231,13 +270,12 @@ def test_classify_uses_llm_category_when_provided(client):
 
 def test_classify_falls_back_to_regex_when_llm_returns_others(client):
     """When LLM returns 'OTHERS', regex fallback should run."""
-    with patch("app.main.classify_sms", return_value={
-             "label": "expense", "confidence": 0.95, "category": "OTHERS"
-         }), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.95, "category": "OTHERS"}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Swiggy"), \
          patch("app.main.guess_category", return_value="FOOD") as mock_guess, \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
         response = client.post(
             "/api/v1/sms/classify",
@@ -253,13 +291,12 @@ def test_classify_falls_back_to_regex_when_llm_returns_others(client):
 
 def test_classify_falls_back_to_regex_when_llm_category_none(client):
     """When LLM fails (category=None), regex fallback should run."""
-    with patch("app.main.classify_sms", return_value={
-             "label": "expense", "confidence": 0.95, "category": None
-         }), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.95, "category": None}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Swiggy"), \
          patch("app.main.guess_category", return_value="FOOD") as mock_guess, \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
         response = client.post(
             "/api/v1/sms/classify",
@@ -274,14 +311,12 @@ def test_classify_falls_back_to_regex_when_llm_category_none(client):
 
 def test_classify_missing_category_key_falls_back_to_regex(client):
     """Backward-compat: if classify_sms doesn't return a 'category' key at all."""
-    with patch("app.main.classify_sms", return_value={
-             "label": "expense", "confidence": 0.95
-             # ← no category key
-         }), \
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.95}), \
          patch("app.main.extract_amount", return_value=299.0), \
          patch("app.main.extract_merchant", return_value="Swiggy"), \
          patch("app.main.guess_category", return_value="FOOD") as mock_guess, \
-         patch("app.main.publish_expense_event"):
+         patch("app.main.publish_expense_event", return_value=True) as mock_publish:
 
         response = client.post(
             "/api/v1/sms/classify",
@@ -292,3 +327,46 @@ def test_classify_missing_category_key_falls_back_to_regex(client):
     body = response.json()
     assert body["event"]["category"] == "FOOD"
     mock_guess.assert_called_once()
+
+def test_classify_kafka_publish_failure_sets_auto_created_false(client):
+    """If Kafka publish fails, autoCreated must be False even though confidence is high."""
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.99, "category": "FOOD"}), \
+         patch("app.main.extract_amount", return_value=299.0), \
+         patch("app.main.extract_merchant", return_value="Swiggy"), \
+         patch("app.main.guess_category", return_value="FOOD"), \
+         patch("app.main.publish_expense_event", return_value=False) as mock_publish:
+
+        response = client.post(
+            "/api/v1/sms/classify",
+            json={"smsText": "Rs. 299 at Swiggy"},
+            headers={"x-user-id": "user-123"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["label"] == "expense"
+    # The event was built and returned in the response body...
+    assert body["event"] is not None
+    # ...but autoCreated is False because publish failed.
+    assert body["autoCreated"] is False
+    mock_publish.assert_called_once()
+
+
+def test_classify_kafka_publish_success_sets_auto_created_true(client):
+    """Sanity check: a returning-True publish results in autoCreated=True."""
+    with patch("app.main.async_classify_sms", new_callable=AsyncMock,
+               return_value={"label": "expense", "confidence": 0.99, "category": "FOOD"}), \
+         patch("app.main.extract_amount", return_value=299.0), \
+         patch("app.main.extract_merchant", return_value="Swiggy"), \
+         patch("app.main.guess_category", return_value="FOOD"), \
+         patch("app.main.publish_expense_event", return_value=True):
+
+        response = client.post(
+            "/api/v1/sms/classify",
+            json={"smsText": "Rs. 299 at Swiggy"},
+            headers={"x-user-id": "user-123"},
+        )
+
+    body = response.json()
+    assert body["autoCreated"] is True

@@ -1,27 +1,20 @@
 # app/main.py
+import asyncio
 import hashlib
-import logging
 import os
 from datetime import date
-from fastapi import FastAPI, Header
+# pyrefly: ignore [missing-import]
+from fastapi import FastAPI, Depends
 from dotenv import load_dotenv
 from opentelemetry import trace
 from prometheus_fastapi_instrumentator import Instrumentator
 
 load_dotenv()
-os.makedirs("logs", exist_ok=True)
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(threadName)s] %(levelname)s [ai-service] %(name)s : %(message)s",
-    handlers=[
-        logging.StreamHandler(),                          # stdout (keep this)
-        logging.FileHandler("logs/ai-service.log"),       # file (add this)
-    ]
-)
-from app.classifier.gemini_classifier import classify_sms
+from app.auth import get_current_user_id
+from app.classifier.gemini_classifier import classify_sms, async_classify_sms
 from app.extractors.regex_extractor import extract_amount, extract_merchant, guess_category
-from app.kafka_client.producer import publish_expense_event
+from app.kafka_client.producer import publish_expense_event, check_kafka_health, _get_producer
 from app.models.schemas import SmsClassifyRequest, SmsClassifyResponse, SmsExpenseEvent
 
 from contextlib import asynccontextmanager
@@ -31,13 +24,39 @@ from app.tracing import setup_tracing
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from app.logging_config import configure_logging
 import logging
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # ── STARTUP ──────────────────────────────────────────────────────────
     await register_with_eureka()
-    yield
+
+    yield  # app is running and serving requests here
+
+    # ── SHUTDOWN (runs on SIGTERM / uvicorn stop) ─────────────────────────
+    # 1. Flush and close the Kafka producer so no in-flight batches are lost.
+    try:
+        producer = _get_producer()
+        producer.flush(timeout=10)   # wait up to 10s for pending sends to confirm
+        producer.close(timeout=5)
+        logger.info("Kafka producer closed gracefully")
+    except Exception as e:
+        logger.warning("Error closing Kafka producer: %s", e)
+
+    # 2. Deregister from Eureka so the gateway stops routing immediately.
+    #    Without this the instance stays in the registry for ~90s (lease expiry).
+    try:
+        import py_eureka_client.eureka_client as eureka_client
+        await eureka_client.stop_async()
+        logger.info("Deregistered from Eureka")
+    except Exception as e:
+        logger.warning("Error deregistering from Eureka: %s", e)
+
 
 app = FastAPI(
     title="ai-service",
@@ -49,29 +68,20 @@ configure_logging()
 FastAPIInstrumentor.instrument_app(app)
 Instrumentator().instrument(app).expose(app)
 
-# app = FastAPI(title="ai-service")
-
 CONFIDENCE_THRESHOLD = 0.85
-# span = trace.get_current_span()
-
-# ctx = span.get_span_context()
 
 
 @app.post("/api/v1/sms/classify", response_model=SmsClassifyResponse)
-def classify(payload: SmsClassifyRequest, x_user_id: str = Header(...)):
-    result = classify_sms(payload.smsText)
+async def classify(payload: SmsClassifyRequest, x_user_id: str = Depends(get_current_user_id)):
+    # Async Gemini call — event loop is free to serve other requests while waiting
+    result = await async_classify_sms(payload.smsText)
     label, confidence = result["label"], result["confidence"]
-    # span = trace.get_current_span()
 
-    # ctx = span.get_span_context()
-
-   
     if label == "irrelevant":
         return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False)
 
     amount = extract_amount(payload.smsText)
     if amount is None:
-        # Nothing to build an event from — no point faking one
         return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False)
 
     merchant = extract_merchant(payload.smsText)
@@ -88,7 +98,7 @@ def classify(payload: SmsClassifyRequest, x_user_id: str = Header(...)):
         externalId=external_id,
         userId=x_user_id,
         amount=amount,
-        currency="INR",
+        currency="INR",  # TODO: multi-currency not yet supported
         type=label.upper(),
         category=category,
         title=merchant or "SMS detected transaction",
@@ -98,17 +108,84 @@ def classify(payload: SmsClassifyRequest, x_user_id: str = Header(...)):
 
     auto_created = False
     if confidence >= CONFIDENCE_THRESHOLD:
-        publish_expense_event(event.model_dump())
-        auto_created = True
+        try:
+            # kafka-python's .send().get() is blocking — run it in a threadpool
+            # so it doesn't freeze the async event loop.
+            loop = asyncio.get_running_loop()
+            published = await loop.run_in_executor(
+                None, publish_expense_event, event.model_dump()
+            )
+            auto_created = published
+            if not published:
+                logger.warning(
+                    "Confidence %.2f above threshold but Kafka publish failed; "
+                    "client will see autoCreated=false for externalId=%s",
+                    confidence,
+                    external_id,
+                )
+        except Exception as e:
+            logger.exception(
+                "Unexpected error publishing expense event externalId=%s: %s",
+                external_id,
+                e,
+            )
+
     logger.info(
-        "SMS classified label=%s confidence=%.2f",
+        "SMS classified label=%s confidence=%.2f autoCreated=%s",
         label,
-        confidence
+        confidence,
+        auto_created,
     )
+
     return SmsClassifyResponse(
         label=label, confidence=confidence, autoCreated=auto_created, event=event,
     )
 
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.exception("Unhandled error on %s", request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": 500,
+            "error": "Internal Server Error",
+            "message": "An unexpected error occurred",
+        },
+    )
+
+
+
+
 @app.get("/actuator/health")
 def health():
-    return {"status": "UP"}
+    checks = {}
+    overall = "UP"
+
+    # --- 1. Kafka broker reachability ---
+    kafka_result = check_kafka_health()
+    checks["kafka"] = kafka_result
+    if kafka_result["status"] == "DOWN":
+        overall = "DOWN"
+
+    # --- 2. Gemini API key present ---
+    if os.environ.get("GEMINI_API_KEY"):
+        checks["gemini"] = {"status": "UP"}
+    else:
+        checks["gemini"] = {"status": "DOWN", "error": "GEMINI_API_KEY not set"}
+        overall = "DOWN"
+
+    # --- 3. JWT secret present ---
+    if os.environ.get("JWT_SECRET"):
+        checks["jwt"] = {"status": "UP"}
+    else:
+        checks["jwt"] = {"status": "DOWN", "error": "JWT_SECRET not set"}
+        overall = "DOWN"
+
+    status_code = 200 if overall == "UP" else 503
+    return JSONResponse(
+        status_code=status_code,
+        content={"status": overall, "components": checks},
+    )

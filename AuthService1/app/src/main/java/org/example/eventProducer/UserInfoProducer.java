@@ -30,23 +30,6 @@ public class UserInfoProducer {
     private static final Duration MAX_BACKOFF  = Duration.ofMinutes(5);
     private static final Duration SEND_TIMEOUT = Duration.ofSeconds(30);
 
-//
-//    @Scheduled(fixedDelay = 5000)
-//    public void publishPendingEvents() {
-//        log.info("Publishing pending events");
-//        List<OutboxEvent> pending = outboxRepository.findTop50ByPublishedFalseOrderByCreatedAtAsc();
-//        for (OutboxEvent event : pending) {
-//            try {
-//                UserInfoEvent payload = objectMapper.readValue(event.getPayload(), UserInfoEvent.class);
-//              payload.setEventId(event.getId());
-//                kafkaTemplate.send(topic, event.getAggregateId(), payload).get(); //can make scheduler slow so increased thread pool
-//                event.setPublished(true);
-//                outboxRepository.save(event);
-//            } catch (Exception e) {
-//                log.error("Failed to publish outbox event {}", event.getId(), e);
-//            }
-//        }
-//    }
 
 
 
@@ -58,7 +41,7 @@ public class UserInfoProducer {
 
         if (pending.isEmpty()) return;
 
-        log.debug("Outbox poller: {} events to process", pending.size());
+        log.info("Outbox poller: {} events to process", pending.size());
 
         for (OutboxEvent event : pending) {
             processOne(event);
@@ -77,7 +60,7 @@ public class UserInfoProducer {
             event.setPublished(true);       // keep legacy flag in sync
             event.setLastError(null);
             outboxRepository.save(event);
-            log.debug("Outbox event {} published (attempt {})", event.getId(), event.getAttemptCount() + 1);
+            log.info("Outbox event {} published (attempt {})", event.getId(), event.getAttemptCount() + 1);
 
         } catch (Exception ex) {
             int newCount = event.getAttemptCount() + 1;

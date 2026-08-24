@@ -1,9 +1,17 @@
+import logging
 import os
 from google import genai
-from google.genai import types
+from google.genai import types, errors
 from pydantic import BaseModel
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception
 
 from typing import Literal, get_args
+
+logger = logging.getLogger(__name__)
+
+# How long to wait for Gemini before giving up.
+# Gateway timelimiter for ai-service is 15s — keep this below that.
+GEMINI_TIMEOUT_MS = 10_000  # 10 seconds in milliseconds
 
 CATEGORY_TYPE = Literal[
     "FOOD", "TRANSPORT", "SHOPPING", "BILLS",
@@ -13,15 +21,18 @@ CATEGORY_TYPE = Literal[
 ]
 ALLOWED_CATEGORIES = set(get_args(CATEGORY_TYPE))
 
+
 class SmsClassification(BaseModel):
     label: Literal["expense", "income", "irrelevant"]
     confidence: float
     category: CATEGORY_TYPE
 
 
-# client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
 def get_client():
-    return genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+    return genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+                        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
+
+
 PROMPT_TEMPLATE = """You classify SMS messages for a personal finance app.
 
 Return three fields: label, confidence, category.
@@ -74,6 +85,37 @@ RULES:
 SMS: {text}"""
 
 
+def _parse_response(response) -> dict:
+    """Shared result-parsing logic used by both sync and async paths."""
+    parsed = SmsClassification.model_validate_json(response.text)
+    label = parsed.label if parsed.label in ("expense", "income", "irrelevant") else "irrelevant"
+    confidence = max(0.0, min(1.0, parsed.confidence))
+    raw_category = parsed.category.upper()
+    category = raw_category if raw_category in ALLOWED_CATEGORIES else "OTHERS"
+    return {"label": label, "confidence": confidence, "category": category}
+
+
+def _timeout_result() -> dict:
+    logger.warning("Gemini call timed out after %dms", GEMINI_TIMEOUT_MS)
+    return {"label": "irrelevant", "confidence": 0.0, "category": None,
+            "error": f"Gemini timeout after {GEMINI_TIMEOUT_MS}ms"}
+
+
+def _error_result(e: Exception) -> dict:
+    logger.exception("Gemini classify_sms failed: %s", e)
+    return {"label": "irrelevant", "confidence": 0.0, "category": None, "error": str(e)}
+
+
+def is_retryable_error(exception: BaseException) -> bool:
+    """Only retry transient errors: Timeout, 429 (Rate limit), 503/500 (Server errors)."""
+    if isinstance(exception, (TimeoutError, errors.ServerError)):
+        return True
+    if isinstance(exception, errors.APIError) and exception.code in (429, 500, 503, 504):
+        return True
+    return False
+
+
+# ── Sync version (kept for tests / backwards compat) ──────────────────────────
 def classify_sms(text: str) -> dict:
     try:
         client = get_client()
@@ -86,15 +128,39 @@ def classify_sms(text: str) -> dict:
                 temperature=0,
             ),
         )
-        parsed = SmsClassification.model_validate_json(response.text)
-        label = parsed.label if parsed.label in ("expense", "income", "irrelevant") else "irrelevant"
-        confidence = max(0.0, min(1.0, parsed.confidence))
-        raw_category = parsed.category.upper()
-        category = raw_category if raw_category in ALLOWED_CATEGORIES else "OTHERS"
-        return {"label": label, "confidence": confidence, "category": category}
-
-
+        return _parse_response(response)
+    except TimeoutError as e:
+        return _timeout_result()
     except Exception as e:
-        # Network failure, rate limit (429), malformed response, etc.
-        # Fail closed — never auto-create an expense from a broken call.
-        return {"label": "irrelevant", "confidence": 0.0, "category": None, "error": str(e)}
+        return _error_result(e)
+
+
+# ── Async version (used by the FastAPI endpoint) ───────────────────────────────
+# Uses client.aio.models.generate_content — native async, no threadpool needed.
+# The event loop is free to handle other requests while waiting for Gemini.
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=3),
+    retry=retry_if_exception(is_retryable_error),
+    reraise=True,
+)
+async def _call_gemini_with_retry(client, text: str):
+    return await client.aio.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=PROMPT_TEMPLATE.format(text=text),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=SmsClassification,
+            temperature=0,
+        ),
+    )
+
+async def async_classify_sms(text: str) -> dict:
+    try:
+        client = get_client()
+        response = await _call_gemini_with_retry(client, text)
+        return _parse_response(response)
+    except TimeoutError as e:
+        return _timeout_result()
+    except Exception as e:
+        return _error_result(e)

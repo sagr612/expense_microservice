@@ -11,11 +11,7 @@ import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import javax.crypto.spec.SecretKeySpec;
 
-/**
- * Decodes and verifies HS256-signed JWTs issued by AuthService. Uses the
- * shared JWT_SECRET (base64) from the environment — same key material used
- * by AuthService's JwtService to sign, so signatures match.
- */
+
 @Configuration
 public class JwtDecoderConfig {
 

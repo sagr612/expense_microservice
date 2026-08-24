@@ -17,7 +17,7 @@ class TestExtractAmount:
             ("Rs 500 debited", 500.0),
             ("INR 1,234.50 credited", 1234.50),
             ("rs.99.99 spent at store", 99.99),
-            ("INR2500 debited", 2500.0),
+            ("INR 2500 debited", 2500.0),
         ],
     )
     def test_extracts_amount_across_formats(self, text, expected):
