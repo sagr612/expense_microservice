@@ -1,17 +1,23 @@
 package org.example.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.example.entities.PasswordResetToken;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
 import org.example.eventProducer.UserInfoProducer;
+import org.example.exceptions.InvalidTokenException;
+import org.example.exceptions.TokenExpiredException;
 import org.example.exceptions.UserAlreadyExistsException;
 import org.example.model.PasswordDto;
 import org.example.model.RefreshTokenResponse;
 import org.example.model.UserInfoDto;
 import org.example.repository.OutboxRepository;
+import org.example.repository.PasswordResetTokenRepository;
+import org.example.repository.RefreshTokenRepository;
 import org.example.repository.UserRepository;
 import org.example.response.JwtResponseDTO;
+import org.example.service.EmailService;
 import org.example.service.JwtService;
 import org.example.service.RefreshTokenService;
 import org.example.service.UserDetailsServiceImpl;
@@ -29,6 +35,8 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Optional;
 import java.util.Set;
 
@@ -62,17 +70,19 @@ class UserDetailsServiceImplTest {
 
     private UserInfo user;
 
+    @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private RefreshTokenRepository refreshTokenRepository;
+
     @BeforeEach
     void setup() {
 
-        user = UserInfo.builder()
-                .userId("user-1")
-                .username("john")
-                .password("encodedPassword")
-                .phoneNumber("9999999999")
-                .email("john@test.com")
-                .roles(Set.of(UserRole.ROLE_USER))
-                .build();
+        user = UserInfo.builder().userId("user-1").username("john").password("encodedPassword").phoneNumber("9999999999").email("john@test.com").roles(Set.of(UserRole.ROLE_USER)).build();
     }
 
     //=========================================================
@@ -82,11 +92,9 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldLoadUserByUsername() {
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.of(user));
 
-        UserDetails result =
-                service.loadUserByUsername("john");
+        UserDetails result = service.loadUserByUsername("john");
 
         assertNotNull(result);
         assertEquals("john", result.getUsername());
@@ -98,13 +106,9 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldThrowWhenUserNotFound() {
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(null);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.empty());
 
-        assertThrows(
-                UsernameNotFoundException.class,
-                () -> service.loadUserByUsername("john")
-        );
+        assertThrows(UsernameNotFoundException.class, () -> service.loadUserByUsername("john"));
 
         verify(userRepository).findByUsername("john");
     }
@@ -116,11 +120,9 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldReturnExistingUser() {
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.of(user));
 
-        UserInfo result =
-                service.checkIfUserAlreadyExist("john");
+        UserInfo result = service.checkIfUserAlreadyExist("john");
 
         assertEquals(user, result);
 
@@ -134,55 +136,31 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldSignupSuccessfully() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .firstName("John")
-                        .lastName("Doe")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").firstName("John").lastName("Doe").email("john@test.com").phoneNumber("9999999999").build();
 
-        when(passwordEncoder.encode("password123"))
-                .thenReturn("encodedPassword");
+        when(passwordEncoder.encode("password123")).thenReturn("encodedPassword");
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(null);
+        when(userRepository.existsByUsername("john")).thenReturn(false);
 
-        when(userRepository.existsByPhoneNumber(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
 
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
 
-        when(userRepository.save(any(UserInfo.class)))
-                .thenAnswer(i -> i.getArgument(0));
+        when(userRepository.save(any(UserInfo.class))).thenAnswer(i -> i.getArgument(0));
 
-        UserInfo saved =
-                service.signupUser(dto);
+        UserInfo saved = service.signupUser(dto);
 
         assertNotNull(saved);
 
-        assertEquals(
-                "john",
-                saved.getUsername()
-        );
+        assertEquals("john", saved.getUsername());
 
-        assertEquals(
-                "encodedPassword",
-                saved.getPassword()
-        );
+        assertEquals("encodedPassword", saved.getPassword());
 
-        assertTrue(
-                saved.getRoles().contains(UserRole.ROLE_USER)
-        );
+        assertTrue(saved.getRoles().contains(UserRole.ROLE_USER));
 
-        verify(passwordEncoder)
-                .encode("password123");
+        verify(passwordEncoder).encode("password123");
 
-        verify(userRepository)
-                .save(any(UserInfo.class));
+        verify(userRepository).save(any(UserInfo.class));
 
 
     }
@@ -190,33 +168,19 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldGenerateRandomUserIdDuringSignup() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .firstName("John")
-                        .lastName("Doe")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").firstName("John").lastName("Doe").email("john@test.com").phoneNumber("9999999999").build();
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
 
-        when(userRepository.findByUsername(anyString()))
-                .thenReturn(null);
+        when(userRepository.existsByUsername(anyString())).thenReturn(false);
 
-        when(userRepository.existsByPhoneNumber(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
 
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
 
-        when(userRepository.save(any(UserInfo.class)))
-                .thenAnswer(i -> i.getArgument(0));
+        when(userRepository.save(any(UserInfo.class))).thenAnswer(i -> i.getArgument(0));
 
-        UserInfo saved =
-                service.signupUser(dto);
+        UserInfo saved = service.signupUser(dto);
 
         assertNotNull(saved.getUserId());
         assertFalse(saved.getUserId().isBlank());
@@ -224,62 +188,36 @@ class UserDetailsServiceImplTest {
 
     @Test
     void shouldThrowWhenUsernameAlreadyExists() {
-        UserInfoDto dto = UserInfoDto.builder()
-                .username("john")
-                .password("password123")
-                .email("john@test.com")
-                .phoneNumber("9999999999")
-                .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").email("john@test.com").phoneNumber("9999999999").build();
 
-        when(userRepository.findByUsername("john")).thenReturn(user);
+        when(userRepository.existsByUsername("john")).thenReturn(true);
 
-        UserAlreadyExistsException ex = assertThrows(
-                UserAlreadyExistsException.class,
-                () -> service.signupUser(dto)
-        );
+        UserAlreadyExistsException ex = assertThrows(UserAlreadyExistsException.class, () -> service.signupUser(dto));
         verify(userRepository, never()).save(any());
     }
 
     @Test
     void shouldThrowWhenPhoneAlreadyExists() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").email("john@test.com").phoneNumber("9999999999").build();
 
 
-        when(userRepository.findByUsername(anyString()))
-                .thenReturn(null);
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(false);
-        when(userRepository.existsByPhoneNumber(anyString()))
-                .thenReturn(true);
+//         when(userRepository.findByUsername(anyString())).thenReturn(null);
+//        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(true);
 
-        assertThrows(
-                UserAlreadyExistsException.class,
-                () -> service.signupUser(dto)
-        );
+        assertThrows(UserAlreadyExistsException.class, () -> service.signupUser(dto));
 
-        verify(userRepository, never())
-                .save(any());
+        verify(userRepository, never()).save(any());
     }
 
     @Test
     void shouldThrowWhenEmailAlreadyExists() {
 
-        UserInfoDto dto = UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").email("john@test.com").phoneNumber("9999999999").build();
 
 
-        when(userRepository.findByUsername(anyString())).thenReturn(null);
+//        when(userRepository.findByUsername(anyString())).thenReturn(null);
         when(userRepository.existsByPhoneNumber(anyString())).thenReturn(true);
 
         assertThrows(UserAlreadyExistsException.class, () -> service.signupUser(dto));
@@ -288,30 +226,17 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldPublishKafkaEventOnSignup() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .firstName("John")
-                        .lastName("Doe")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").firstName("John").lastName("Doe").email("john@test.com").phoneNumber("9999999999").build();
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
 
-        when(userRepository.findByUsername(anyString()))
-                .thenReturn(null);
+        when(userRepository.existsByUsername(anyString())).thenReturn(false);
 
-        when(userRepository.existsByPhoneNumber(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
 
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
 
-        when(userRepository.save(any(UserInfo.class)))
-                .thenAnswer(i -> i.getArgument(0));
+        when(userRepository.save(any(UserInfo.class))).thenAnswer(i -> i.getArgument(0));
 
         service.signupUser(dto);
 
@@ -320,45 +245,27 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldSaveEncodedPassword() {
 
-        UserInfoDto dto =
-                UserInfoDto.builder()
-                        .username("john")
-                        .password("password123")
-                        .firstName("John")
-                        .lastName("Doe")
-                        .email("john@test.com")
-                        .phoneNumber("9999999999")
-                        .build();
+        UserInfoDto dto = UserInfoDto.builder().username("john").password("password123").firstName("John").lastName("Doe").email("john@test.com").phoneNumber("9999999999").build();
 
-        when(passwordEncoder.encode(anyString()))
-                .thenReturn("encodedPassword");
+        when(passwordEncoder.encode(anyString())).thenReturn("encodedPassword");
 
-        when(userRepository.findByUsername(anyString()))
-                .thenReturn(null);
+        when(userRepository.existsByUsername(anyString())).thenReturn(false);
 
-        when(userRepository.existsByPhoneNumber(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByPhoneNumber(anyString())).thenReturn(false);
 
-        when(userRepository.existsByEmail(anyString()))
-                .thenReturn(false);
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
 
-        when(userRepository.save(any(UserInfo.class)))
-                .thenAnswer(i -> i.getArgument(0));
+        when(userRepository.save(any(UserInfo.class))).thenAnswer(i -> i.getArgument(0));
 
         service.signupUser(dto);
 
-        ArgumentCaptor<UserInfo> captor =
-                ArgumentCaptor.forClass(UserInfo.class);
+        ArgumentCaptor<UserInfo> captor = ArgumentCaptor.forClass(UserInfo.class);
 
-        verify(userRepository)
-                .save(captor.capture());
+        verify(userRepository).save(captor.capture());
 
         UserInfo saved = captor.getValue();
 
-        assertEquals(
-                "encodedPassword",
-                saved.getPassword()
-        );
+        assertEquals("encodedPassword", saved.getPassword());
     }
     //=========================================================
     // changePassword()
@@ -367,163 +274,85 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldChangePasswordSuccessfully() {
 
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        "user-1",
-                        null
-                )
-        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("user-1", null));
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("oldPassword")
-                .newPassword("newPassword")
-                .build();
+        PasswordDto dto = PasswordDto.builder().oldPassword("oldPassword").newPassword("newPassword").build();
 
-        when(userRepository.findById("user-1"))
-                .thenReturn(Optional.of(user));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
 
-        when(passwordEncoder.matches(
-                "oldPassword",
-                "encodedPassword"))
-                .thenReturn(true);
+        when(passwordEncoder.matches("oldPassword", "encodedPassword")).thenReturn(true);
 
-        when(passwordEncoder.encode("newPassword"))
-                .thenReturn("newEncodedPassword");
+        when(passwordEncoder.encode("newPassword")).thenReturn("newEncodedPassword");
 
-        RefreshToken refreshToken =
-                RefreshToken.builder()
-                        .tokenHash("refresh-token")
-                        .build();
+        RefreshToken refreshToken = RefreshToken.builder().tokenHash("refresh-token").build();
 
-        when(refreshTokenService.createRefreshToken("john"))
-                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
+        when(refreshTokenService.createRefreshToken("john")).thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        when(jwtService.generateToken(
-                anyString(),
-                anyString(),
-                anyList()))
-                .thenReturn("jwt-token");
+        when(jwtService.generateToken(anyString(), anyString(), anyList())).thenReturn("jwt-token");
 
-        JwtResponseDTO response =
-                service.changePassword(dto);
+        JwtResponseDTO response = service.changePassword(dto);
 
         assertNotNull(response);
 
-        assertEquals(
-                "jwt-token",
-                response.getAccessToken());
+        assertEquals("jwt-token", response.getAccessToken());
 
         assertEquals("refresh-token", response.getToken());
 
-        assertEquals(
-                "newEncodedPassword",
-                user.getPassword());
+        assertEquals("newEncodedPassword", user.getPassword());
 
-        verify(passwordEncoder)
-                .encode("newPassword");
+        verify(passwordEncoder).encode("newPassword");
 
-        verify(refreshTokenService)
-                .createRefreshToken("john");
+        verify(refreshTokenService).createRefreshToken("john");
 
-        verify(jwtService)
-                .generateToken(
-                        anyString(),
-                        anyString(),
-                        anyList());
+        verify(jwtService).generateToken(anyString(), anyString(), anyList());
     }
 
     @Test
     void shouldThrowWhenOldPasswordIncorrect() {
 
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        "user-1",
-                        null
-                )
-        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("user-1", null));
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("wrong")
-                .newPassword("newPassword")
-                .build();
+        PasswordDto dto = PasswordDto.builder().oldPassword("wrong").newPassword("newPassword").build();
 
-        when(userRepository.findById("user-1"))
-                .thenReturn(Optional.of(user));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
 
-        when(passwordEncoder.matches(
-                anyString(),
-                anyString()))
-                .thenReturn(false);
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(false);
 
-        RuntimeException exception =
-                assertThrows(
-                        RuntimeException.class,
-                        () -> service.changePassword(dto));
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> service.changePassword(dto));
 
-        assertEquals(
-                "Incorrect old password",
-                exception.getMessage());
+        assertEquals("Incorrect old password", exception.getMessage());
 
-        verify(refreshTokenService, never())
-                .createRefreshToken(anyString());
+        verify(refreshTokenService, never()).createRefreshToken(anyString());
 
     }
 
     @Test
     void shouldThrowWhenNewPasswordSameAsOld() {
 
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        "user-1",
-                        null
-                )
-        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("user-1", null));
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("samePassword")
-                .newPassword("samePassword")
-                .build();
+        PasswordDto dto = PasswordDto.builder().oldPassword("samePassword").newPassword("samePassword").build();
 
-        when(userRepository.findById("user-1"))
-                .thenReturn(Optional.of(user));
+        when(userRepository.findById("user-1")).thenReturn(Optional.of(user));
 
-        when(passwordEncoder.matches(
-                anyString(),
-                anyString()))
-                .thenReturn(true);
+        when(passwordEncoder.matches(anyString(), anyString())).thenReturn(true);
 
-        IllegalArgumentException exception =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> service.changePassword(dto));
+        IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () -> service.changePassword(dto));
 
-        assertEquals(
-                "New password cannot be same as old password",
-                exception.getMessage());
+        assertEquals("New password cannot be same as old password", exception.getMessage());
 
     }
 
     @Test
     void shouldThrowWhenChangingPasswordForMissingUser() {
 
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(
-                        "user-1",
-                        null
-                )
-        );
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("user-1", null));
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("old")
-                .newPassword("new")
-                .build();
+        PasswordDto dto = PasswordDto.builder().oldPassword("old").newPassword("new").build();
 
-        when(userRepository.findById("user-1"))
-                .thenReturn(Optional.empty());
+        when(userRepository.findById("user-1")).thenReturn(Optional.empty());
 
-        assertThrows(
-                UsernameNotFoundException.class,
-                () -> service.changePassword(dto));
+        assertThrows(UsernameNotFoundException.class, () -> service.changePassword(dto));
 
     }
 
@@ -534,26 +363,20 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldReturnUserId() {
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.of(user));
 
-        String id =
-                service.getUserByUsername("john");
+        String id = service.getUserByUsername("john");
 
-        assertEquals(
-                "user-1",
-                id);
+        assertEquals("user-1", id);
 
     }
 
     @Test
     void shouldReturnNullWhenUserDoesNotExist() {
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(null);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.empty());
 
-        assertNull(
-                service.getUserByUsername("john"));
+        assertNull(service.getUserByUsername("john"));
 
     }
 
@@ -564,88 +387,155 @@ class UserDetailsServiceImplTest {
     @Test
     void shouldChangeUsernameSuccessfully() {
 
-        when(userRepository.existsByUsername("newUser"))
-                .thenReturn(false);
+        when(userRepository.existsByUsername("newUser")).thenReturn(false);
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+        when(userRepository.findById("john")).thenReturn(Optional.of(user));
 
+        when(refreshTokenService.createRefreshToken("newUser")).thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
+        when(jwtService.generateToken(anyString(), anyString(), anyList())).thenReturn("jwt-token");
 
-        when(refreshTokenService.createRefreshToken("newUser"))
-                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
+        JwtResponseDTO response = service.changeUsername("newUser", "john");
 
-        when(jwtService.generateToken(
-                anyString(),
-                anyString(),
-                anyList()))
-                .thenReturn("jwt-token");
+        assertEquals("newUser", user.getUsername());
 
-        JwtResponseDTO response =
-                service.changeUsername(
-                        "newUser",
-                        "john");
+        assertEquals("jwt-token", response.getAccessToken());
 
-        assertEquals(
-                "newUser",
-                user.getUsername());
+        assertEquals("refresh-token", response.getToken());
 
-        assertEquals(
-                "jwt-token",
-                response.getAccessToken());
-
-        assertEquals(
-                "refresh-token",
-                response.getToken());
-
-        verify(userRepository)
-                .save(user);
+        verify(userRepository).save(user);
 
     }
 
     @Test
     void shouldThrowWhenUsernameAlreadyTaken() {
+        when(userRepository.findById("john")).thenReturn(Optional.of(user));
+        when(userRepository.existsByUsername("newUser")).thenReturn(true);
 
-        when(userRepository.existsByUsername("newUser"))
-                .thenReturn(true);
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> service.changeUsername("newUser", "john"));
 
-        RuntimeException exception =
-                assertThrows(
-                        RuntimeException.class,
-                        () -> service.changeUsername(
-                                "newUser",
-                                "john"));
+        assertEquals("Username already taken", exception.getMessage());
 
-        assertEquals(
-                "Username already taken",
-                exception.getMessage());
-
-        verify(userRepository, never())
-                .save(any());
+        verify(userRepository, never()).save(any());
 
     }
 
     @Test
     void shouldThrowWhenCurrentUserDoesNotExist() {
+        when(userRepository.findById("john")).thenReturn(Optional.empty());
 
-        when(userRepository.existsByUsername(anyString()))
-                .thenReturn(false);
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> service.changeUsername("newUser", "john"));
 
-        when(userRepository.findByUsername("john"))
-                .thenReturn(null);
+        assertEquals("User not found", exception.getMessage());
 
-        RuntimeException exception =
-                assertThrows(
-                        RuntimeException.class,
-                        () -> service.changeUsername(
-                                "newUser",
-                                "john"));
+    }
 
-        assertEquals(
-                "User not found.",
-                exception.getMessage());
+    //=========================================================
+    // forgotPassword()
+    //=========================================================
+
+    @Test
+    void shouldDoNothingWhenEmailIsUnknown() {
+        when(userRepository.findByEmail("xyz@test.com")).thenReturn(Optional.empty());
+
+        service.forgotPassword("xyz@test.com");
+
+        verify(passwordResetTokenRepository, never()).save(any());
+
+        verify(emailService, never()).sendEmail(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void shouldGenerateTokenAndSendEmailWhenUserExists() {
+        // 2. Existing email & Token creation
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+
+        service.forgotPassword("john@test.com");
+        verify(passwordResetTokenRepository).deleteByUserId(user.getUserId());
+
+        ArgumentCaptor<PasswordResetToken> captor = ArgumentCaptor.forClass(PasswordResetToken.class);
+
+        verify(passwordResetTokenRepository).save(captor.capture());
+
+        PasswordResetToken savedToken = captor.getValue();
+
+        assertNotNull(savedToken.getToken());
+        assertEquals(64, savedToken.getToken().length());
+        assertEquals(user, savedToken.getUser());
+        assertFalse(savedToken.isUsed());
+        assertTrue(savedToken.getExpiresAt().isAfter(Instant.now()));
+
+        verify(emailService).sendEmail(eq(user.getEmail()), eq("Reset Your Password"), contains("expensetracker://reset-password?token="));
+    }
+
+
+    @Test
+    void shouldPropagateExceptionWhenEmailFails() {
+        // 3. Email failure
+        when(userRepository.findByEmail("john@test.com")).thenReturn(Optional.of(user));
+
+        doThrow(new RuntimeException("Mail Server down")).when(emailService).sendEmail(anyString(), anyString(), anyString());
+
+        assertDoesNotThrow( () -> service.forgotPassword("john@test.com"));
+    }
+
+
+    //=========================================================
+    // resetPassword()
+    //=========================================================
+
+    @Test
+    void shouldThrowInvalidTokenWhenTokenNotFound() {
+        when(passwordResetTokenRepository.findByToken(anyString())).thenReturn(Optional.empty());
+
+        assertThrows(InvalidTokenException.class, () -> service.resetPassword("invalid-token", "newPassword123!"));
+    }
+
+    @Test
+    void shouldThrowInvalidTokenWhenTokenAlreadyUsed() {
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setToken("used-token");
+        resetToken.setUsed(true);
+        resetToken.setExpiresAt(Instant.now().plus(15, ChronoUnit.MINUTES));
+
+        when(passwordResetTokenRepository.findByToken(anyString())).thenReturn(Optional.of(resetToken));
+
+        assertThrows(InvalidTokenException.class, () -> service.resetPassword("used-token", "newPassword123!"));
+    }
+
+    @Test
+    void shouldThrowTokenExpiredWhenTokenIsExpired() {
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setToken("expired-token");
+        resetToken.setUsed(false);
+        resetToken.setExpiresAt(Instant.now().minus(5, ChronoUnit.MINUTES));
+
+        when(passwordResetTokenRepository.findByToken(anyString())).thenReturn(Optional.of(resetToken));
+
+        assertThrows(TokenExpiredException.class, () -> service.resetPassword("expired-token", "newPassword123!"));
 
     }
 
 
+    @Test
+    void shouldUpdatePasswordAndMarkTokenAsUsedWhenValid() {
+        PasswordResetToken resetToken = new PasswordResetToken();
+        resetToken.setToken("valid-token-hash");
+        resetToken.setUsed(false);
+        resetToken.setUser(user);
+        resetToken.setExpiresAt(Instant.now().plus(15, ChronoUnit.MINUTES));
+
+
+        when(passwordResetTokenRepository.findByToken(anyString())).thenReturn(Optional.of(resetToken));
+
+        when(passwordEncoder.encode("NewPassword123!")).thenReturn("encodedNewPassword");
+
+        service.resetPassword("valid-token", "NewPassword123!");
+
+        assertEquals("encodedNewPassword", user.getPassword());
+        verify(userRepository).save(user);
+
+        assertTrue(resetToken.isUsed());
+        verify(passwordResetTokenRepository).save(resetToken);
+    }
 }

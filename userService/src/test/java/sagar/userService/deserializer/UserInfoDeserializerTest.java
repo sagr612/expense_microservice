@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-class UserInfoDeserializerTest {
+class  UserInfoDeserializerTest {
 
     private final UserInfoDeserializer deserializer = new UserInfoDeserializer();
 
@@ -79,7 +79,7 @@ class UserInfoDeserializerTest {
               "user_id": "user-1",
               "first_name": "Sagar",
               "last_name": "Sharma",
-              "phone_number": "not-a-number",
+               "phone_number": ["not", "a", "valid", "string"],
               "email": "sagar@example.com"
             }
             """;

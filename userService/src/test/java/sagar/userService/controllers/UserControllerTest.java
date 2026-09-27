@@ -11,10 +11,13 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.multipart.MultipartFile;
 import sagar.userService.controller.UserController;
 import sagar.userService.dtos.UserInfoDto;
-import sagar.userService.dtos.UserProfileImageResponse;
+import sagar.userService.dtos.response.UserProfileImageResponse;
+import sagar.userService.dtos.response.UserResponse;
 import sagar.userService.exceptions.DuplicateResourceException;
+import sagar.userService.services.ImageValidator;
 import sagar.userService.services.OutboxAdminService;
 import sagar.userService.services.UserService;
 
@@ -39,20 +42,22 @@ class UserControllerTest {
     private UserService userService;
     @MockitoBean
     private OutboxAdminService outboxAdminService;
+    @MockitoBean
+    private ImageValidator validator;
 
-    private UserInfoDto validDto() {
-        return UserInfoDto.builder()
+    private UserResponse validDto() {
+        return UserResponse.builder()
                 .userId("user-1")
                 .firstName("Sagar")
                 .lastName("Sharma")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .email("sagar@example.com")
                 .build();
     }
 
     @Test
     void createUpdate_returns201_whenPayloadIsValid() throws Exception {
-        UserInfoDto dto = validDto();
+        UserResponse dto = validDto();
         when(userService.createUser(any())).thenReturn(dto);
 
         mockMvc.perform(post("/api/v1/users")
@@ -64,7 +69,7 @@ class UserControllerTest {
 
     @Test
     void createUpdate_returns400_whenRequiredFieldMissing() throws Exception {
-        UserInfoDto invalid = validDto();
+        UserResponse invalid = validDto();
         invalid.setEmail(null);
 
         mockMvc.perform(post("/api/v1/users")
@@ -79,7 +84,7 @@ class UserControllerTest {
 
     @Test
     void createUpdate_returns409_whenEmailAlreadyExists() throws Exception {
-        UserInfoDto dto = validDto();
+        UserResponse dto = validDto();
         when(userService.createUser(any()))
                 .thenThrow(new DuplicateResourceException("Email already in use: " + dto.getEmail()));
 
@@ -128,14 +133,16 @@ class UserControllerTest {
 
         mockMvc.perform(multipart(HttpMethod.PATCH,"/api/v1/users/user-1/profile-image").file(image))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.userId").value("user-1"));
+                .andExpect(jsonPath("$.user_id").value("user-1"));
     }
 
     @Test
     void uploadProfileImage_returns400_whenFileIsEmpty() throws Exception {
         MockMultipartFile emptyFile = new MockMultipartFile(
                 "image", "avatar.png", "image/png", new byte[0]);
+//when(validator.validate(emptyFile)).thenThrow(new IllegalArgumentException("File must not be empty"));
 
+       doThrow(new IllegalArgumentException("File must not be empty")).when(validator).validate(any(MultipartFile.class));
         mockMvc.perform(multipart(HttpMethod.PATCH,"/api/v1/users/user-1/profile-image").file(emptyFile))
                 .andExpect(status().isBadRequest());
 
@@ -146,6 +153,9 @@ class UserControllerTest {
     void uploadProfileImage_returns400_whenContentTypeIsNotImage() throws Exception {
         MockMultipartFile nonImageFile = new MockMultipartFile(
                 "image", "notes.txt", "text/plain", "hello".getBytes());
+
+        doThrow(new IllegalArgumentException("Only JPEG, PNG, and WebP formats are supported")).when(validator).validate(any(MultipartFile.class));
+
 
         mockMvc.perform(multipart(HttpMethod.PATCH,"/api/v1/users/user-1/profile-image").file(nonImageFile))
                 .andExpect(status().isBadRequest());

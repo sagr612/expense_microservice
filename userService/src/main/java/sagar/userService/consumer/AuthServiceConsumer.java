@@ -24,13 +24,11 @@ public class AuthServiceConsumer {
     private String consumerGroup;
 
     @KafkaListener(topics = "${spring.kafka.topic-json.name}", groupId = "${spring.kafka.consumer.group-id}")
-    @Transactional
     public void listen(UserInfoDto eventData) {
         String eventId = eventData.getEventId();
 
         if (eventId == null || eventId.isBlank()) {
-            log.warn("Event without eventId — falling back to at-least-once semantics; userId={}",
-                    eventData.getUserId());
+            log.warn("Event without eventId — falling back to at-least-once semantics; userId={}", eventData.getUserId());
             userService.upsertFromEvent(eventData);
             return;
         }
@@ -39,16 +37,10 @@ public class AuthServiceConsumer {
             log.debug("Skipping already-processed event {}", eventId);
             return;
         }
+        userService.upsertFromEvent(eventData);
 
-        try {
-            userService.upsertFromEvent(eventData);
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(eventId)
-                    .consumerGroup(consumerGroup)
-                    .build());
-            log.info("Processed event {} for userId {}", eventId, eventData.getUserId());
-        } catch (DataIntegrityViolationException dup) {
-            log.debug("Concurrent processing of {} — swallowing dup marker error", eventId);
-        }
+        processedEventRepository.save(ProcessedEvent.builder().eventId(eventId).consumerGroup(consumerGroup).build());
+        log.info("Processed event {} for userId {}", eventId, eventData.getUserId());
+
     }
 }

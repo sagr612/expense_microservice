@@ -1,6 +1,7 @@
 package org.example.services;
 
 import org.example.entities.UserInfo;
+import org.example.repository.PasswordResetTokenRepository;
 import org.example.repository.RefreshTokenRepository;
 import org.example.repository.UserRepository;
 import org.example.service.UserCleanupService;
@@ -27,6 +28,9 @@ class UserCleanupServiceTest {
 
     @InjectMocks
     private UserCleanupService userCleanupService;
+
+    @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
 
     private UserInfo user;
 

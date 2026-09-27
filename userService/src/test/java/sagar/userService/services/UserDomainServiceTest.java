@@ -35,7 +35,7 @@ class UserDomainServiceTest {
                 .userId("user-1")
                 .firstName("Sagar")
                 .lastName("Sharma")
-                .phoneNumber(9999999999L)
+                .phoneNumber("9999999999")
                 .email("sagar@example.com")
                 .build();
     }
@@ -95,7 +95,7 @@ class UserDomainServiceTest {
                     .userId("user-1")
                     .firstName("Old")
                     .lastName("Name")
-                    .phoneNumber(1111111111L)
+                    .phoneNumber("1111111111")
                     .email("old@example.com")
                     .profilePic("old-pic-url")
                     .build();
@@ -104,7 +104,7 @@ class UserDomainServiceTest {
                     .userId("user-1")
                     .firstName("New")
                     .lastName("Name2")
-                    .phoneNumber(2222222222L)
+                    .phoneNumber("2222222222")
                     .email("new@example.com")
                     .profilePic("new-pic-url")
                     .build();
@@ -113,7 +113,7 @@ class UserDomainServiceTest {
 
             assertThat(result.getFirstName()).isEqualTo("New");
             assertThat(result.getLastName()).isEqualTo("Name2");
-            assertThat(result.getPhoneNumber()).isEqualTo(2222222222L);
+            assertThat(result.getPhoneNumber()).isEqualTo("2222222222");
             assertThat(result.getEmail()).isEqualTo("new@example.com");
             assertThat(result.getProfilePic()).isEqualTo("new-pic-url");
         }
@@ -126,7 +126,7 @@ class UserDomainServiceTest {
                     .userId("user-1")
                     .firstName("Sagar")
                     .lastName("Sharma")
-                    .phoneNumber(9999999999L)
+                    .phoneNumber("9999999999")
                     .email("sagar@example.com")
                     .profilePic("existing-pic-url")
                     .build();
@@ -144,7 +144,7 @@ class UserDomainServiceTest {
 
             assertThat(result.getFirstName()).isEqualTo("Sagar");
             assertThat(result.getLastName()).isEqualTo("Sharma");
-            assertThat(result.getPhoneNumber()).isEqualTo(9999999999L);
+            assertThat(result.getPhoneNumber()).isEqualTo("9999999999");
             assertThat(result.getEmail()).isEqualTo("updated@example.com");
             assertThat(result.getProfilePic()).isEqualTo("existing-pic-url");
         }

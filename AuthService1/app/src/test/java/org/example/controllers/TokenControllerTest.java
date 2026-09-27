@@ -1,18 +1,14 @@
 package org.example.controllers;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.tracing.Span;
-import io.micrometer.tracing.TraceContext;
-import io.micrometer.tracing.Tracer;
 import org.example.auth.JwtAuthFilter;
 import org.example.controller.TokenController;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
 import org.example.exceptions.DuplicateResourceException;
-import org.example.model.PasswordDto;
-import org.example.model.RefreshTokenResponse;
-import org.example.model.UpdateUsernameReq;
+import org.example.exceptions.InvalidTokenException;
+import org.example.model.*;
 import org.example.request.AuthRequestDTO;
 import org.example.request.RefreshTokenRequestDTO;
 import org.example.response.JwtResponseDTO;
@@ -20,15 +16,16 @@ import org.example.service.JwtService;
 import org.example.service.RefreshTokenService;
 import org.example.service.UserDetailsServiceImpl;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -38,6 +35,7 @@ import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -66,8 +64,9 @@ class TokenControllerTest {
     @MockBean
     JwtAuthFilter jwtAuthFilter;
 
-    @MockBean
-    Tracer tracer;
+    private Authentication userAuth(String userId) {
+        return new UsernamePasswordAuthenticationToken(userId, null, List.of(new SimpleGrantedAuthority("ROLE_USER")));
+    }
 
     //---------------------------------------------------------
     // login
@@ -76,45 +75,21 @@ class TokenControllerTest {
     @Test
     void shouldLoginSuccessfully() throws Exception {
 
-        AuthRequestDTO request = AuthRequestDTO.builder()
-                .username("john")
-                .password("password")
-                .build();
+        AuthRequestDTO request = AuthRequestDTO.builder().username("john").password("password").build();
 
-        when(authenticationManager.authenticate(any()))
-                .thenReturn(new TestingAuthenticationToken(
-                        "john",
-                        null,
-                        "ROLE_USER"
-                ));
+        when(authenticationManager.authenticate(any())).thenReturn(new TestingAuthenticationToken("john", null, "ROLE_USER"));
 
-        RefreshToken refreshToken =
-                RefreshToken.builder()
-                        .tokenHash("refresh-token")
-                        .build();
+        RefreshToken refreshToken = RefreshToken.builder().tokenHash("refresh-token").build();
 
-        when(refreshTokenService.createRefreshToken("john"))
-                .thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
+        when(refreshTokenService.createRefreshToken("john")).thenReturn(RefreshTokenResponse.builder().token("refresh-token").build());
 
-        UserInfo user =
-                UserInfo.builder()
-                        .userId("user-1")
-                        .username("john")
-                        .roles(Set.of(UserRole.ROLE_USER))
-                        .build();
+        UserInfo user = UserInfo.builder().userId("user-1").username("john").roles(Set.of(UserRole.ROLE_USER)).build();
 
-        when(userDetailsService.checkIfUserAlreadyExist("john"))
-                .thenReturn(user);
+        when(userDetailsService.checkIfUserAlreadyExist("john")).thenReturn(user);
 
-        when(jwtService.generateToken(anyString(), anyString(), anyList()))
-                .thenReturn("jwt-token");
+        when(jwtService.generateToken(anyString(), anyString(), anyList())).thenReturn("jwt-token");
 
-        mockMvc.perform(post("/auth/v1/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("jwt-token"))
-                .andExpect(jsonPath("$.token").value("refresh-token"));
+        mockMvc.perform(post("/auth/v1/login").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").value("jwt-token")).andExpect(jsonPath("$.token").value("refresh-token"));
 
         verify(authenticationManager).authenticate(any());
         verify(refreshTokenService).createRefreshToken("john");
@@ -123,37 +98,22 @@ class TokenControllerTest {
     @Test
     void shouldReturnUnauthorizedWhenAuthenticationFails() throws Exception {
 
-        AuthRequestDTO request = AuthRequestDTO.builder()
-                .username("john")
-                .password("wrong")
-                .build();
+        AuthRequestDTO request = AuthRequestDTO.builder().username("john").password("wrong").build();
 
-        when(authenticationManager.authenticate(any()))
-                .thenReturn(new TestingAuthenticationToken(
-                        "john",
-                        null
-                ));
+        when(authenticationManager.authenticate(any())).thenReturn(new TestingAuthenticationToken("john", null));
 
-        mockMvc.perform(post("/auth/v1/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/auth/v1/login").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isUnauthorized());
 
     }
 
     @Test
     void shouldLoginEvenWithEmptyFields() throws Exception {
 
-        AuthRequestDTO request =
-                new AuthRequestDTO();
+        AuthRequestDTO request = new AuthRequestDTO();
 
-        when(authenticationManager.authenticate(any()))
-                .thenThrow(new RuntimeException("Authentication failed"));
+        when(authenticationManager.authenticate(any())).thenThrow(new RuntimeException("Authentication failed"));
 
-        mockMvc.perform(post("/auth/v1/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/auth/v1/login").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isBadRequest());
 
     }
 
@@ -164,56 +124,26 @@ class TokenControllerTest {
     @Test
     void shouldRefreshTokenSuccessfully() throws Exception {
 
-        RefreshTokenRequestDTO dto =
-                new RefreshTokenRequestDTO("refresh");
+        RefreshTokenRequestDTO dto = new RefreshTokenRequestDTO("refresh");
 
-        UserInfo user =
-                UserInfo.builder()
-                        .userId("1")
-                        .username("john")
-                        .roles(Set.of(UserRole.ROLE_USER))
-                        .build();
 
-        RefreshToken token =
-                RefreshToken.builder()
-                        .tokenHash("refresh")
-                        .userInfo(user)
-                        .build();
+        JwtResponseDTO mockResponse = JwtResponseDTO.builder().accessToken("new-access").token("refresh").build();
 
-        when(refreshTokenService.findByToken("refresh"))
-                .thenReturn(Optional.of(token));
-        when(refreshTokenService.createRefreshToken(anyString()))
-                .thenReturn(RefreshTokenResponse.builder().token("refresh").build());
-        when(refreshTokenService.verifyExpirationAndDeleteIfExpired(token))
-                .thenReturn(token);
+        when(refreshTokenService.rotateRefreshToken(anyString())).thenReturn(mockResponse);
 
-        when(jwtService.generateToken(anyString(), anyString(), anyList()))
-                .thenReturn("new-access");
+        mockMvc.perform(post("/auth/v1/refreshToken").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(dto))).andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").value("new-access")).andExpect(jsonPath("$.token").value("refresh"));
 
-        mockMvc.perform(post("/auth/v1/refreshToken")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken")
-                        .value("new-access"))
-                .andExpect(jsonPath("$.token")
-                        .value("refresh"));
+        verify(refreshTokenService).rotateRefreshToken("refresh");
 
     }
 
     @Test
     void shouldReturnUnauthorizedWhenRefreshTokenMissing() throws Exception {
+        RefreshTokenRequestDTO dto = new RefreshTokenRequestDTO("invalid");
 
-        RefreshTokenRequestDTO dto =
-                new RefreshTokenRequestDTO("invalid");
+        when(refreshTokenService.rotateRefreshToken(anyString())).thenThrow(new InvalidTokenException("Refresh token not found"));
 
-        when(refreshTokenService.findByToken(anyString()))
-                .thenReturn(Optional.empty());
-
-        mockMvc.perform(post("/auth/v1/refreshToken")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isUnauthorized());
+        mockMvc.perform(post("/auth/v1/refreshToken").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(dto))).andExpect(status().isUnauthorized());
 
     }
     //---------------------------------------------------------
@@ -223,28 +153,19 @@ class TokenControllerTest {
     @Test
     void shouldChangePasswordSuccessfully() throws Exception {
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("oldPassword")
-                .newPassword("newPassword")
+        PasswordDto dto = PasswordDto.builder().oldPassword("oldPassword1") // has letters + digits, length >= 8
+                .newPassword("newPassword1") // has letters + digits, length >= 8
                 .build();
 
-        JwtResponseDTO response =
-                JwtResponseDTO.builder()
-                        .accessToken("jwt-token")
-                        .token("refresh-token")
-                        .build();
+        JwtResponseDTO response = JwtResponseDTO.builder().accessToken("jwt-token").token("refresh-token").build();
 
-        when(userDetailsService.changePassword(any()))
-                .thenReturn(response);
+        when(userDetailsService.changePassword(any())).thenReturn(response);
 
         mockMvc.perform(post("/auth/v1/change/passwords")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken")
-                        .value("jwt-token"))
-                .andExpect(jsonPath("$.token")
-                        .value("refresh-token"));
+//                        .with(authentication(userAuth(("user"))))
+//                        .principal(userAuth("user"))
+
+                .contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(dto))).andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").value("jwt-token")).andExpect(jsonPath("$.token").value("refresh-token"));
 
         verify(userDetailsService).changePassword(any());
 
@@ -253,18 +174,13 @@ class TokenControllerTest {
     @Test
     void shouldReturnNotFoundWhenChangingPasswordFails() throws Exception {
 
-        PasswordDto dto = PasswordDto.builder()
-                .oldPassword("wrong")
-                .newPassword("newPassword")
+        PasswordDto dto = PasswordDto.builder().oldPassword("oldPassword1") // has letters + digits, length >= 8
+                .newPassword("newPassword1") // has letters + digits, length >= 8
                 .build();
 
-        when(userDetailsService.changePassword(any()))
-                .thenThrow(new UsernameNotFoundException("Incorrect old password"));
+        when(userDetailsService.changePassword(any())).thenThrow(new UsernameNotFoundException("Incorrect old password"));
 
-        mockMvc.perform(post("/auth/v1/change/passwords")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/auth/v1/change/passwords").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(dto))).andExpect(status().isNotFound());
 
     }
 
@@ -275,53 +191,26 @@ class TokenControllerTest {
     @Test
     void shouldChangeUsernameSuccessfully() throws Exception {
 
-        UpdateUsernameReq request =
-                UpdateUsernameReq.builder()
-                        .currentUsername("john")
-                        .newUsername("john123")
-                        .build();
+        UpdateUsernameReq request = UpdateUsernameReq.builder().newUsername("john123").build();
 
-        JwtResponseDTO response =
-                JwtResponseDTO.builder()
-                        .accessToken("jwt-token")
-                        .token("refresh-token")
-                        .build();
+        JwtResponseDTO response = JwtResponseDTO.builder().accessToken("jwt-token").token("refresh-token").build();
 
-        when(userDetailsService.changeUsername(
-                "john123",
-                "john"))
-                .thenReturn(response);
+        when(userDetailsService.changeUsername("john123", "user")).thenReturn(response);
 
-        mockMvc.perform(post("/auth/v1/change/username")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken")
-                        .value("jwt-token"))
-                .andExpect(jsonPath("$.token")
-                        .value("refresh-token"));
+        mockMvc.perform(post("/auth/v1/change/username").principal(userAuth("user")).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isOk()).andExpect(jsonPath("$.accessToken").value("jwt-token")).andExpect(jsonPath("$.token").value("refresh-token"));
 
-        verify(userDetailsService)
-                .changeUsername("john123", "john");
+        verify(userDetailsService).changeUsername("john123", "user");
 
     }
 
     @Test
     void shouldReturnConflictWhenUsernameAlreadyExists() throws Exception {
 
-        UpdateUsernameReq request =
-                UpdateUsernameReq.builder()
-                        .currentUsername("john")
-                        .newUsername("john123")
-                        .build();
+        UpdateUsernameReq request = UpdateUsernameReq.builder().newUsername("john123").build();
 
-        when(userDetailsService.changeUsername(anyString(), anyString()))
-                .thenThrow(new DuplicateResourceException("Username already taken"));
+        when(userDetailsService.changeUsername(anyString(), anyString())).thenThrow(new DuplicateResourceException("Username already taken"));
 
-        mockMvc.perform(post("/auth/v1/change/username")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isConflict());
+        mockMvc.perform(post("/auth/v1/change/username").principal(userAuth("user")).contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isConflict());
 
     }
 
@@ -333,31 +222,42 @@ class TokenControllerTest {
     @Test
     void shouldRejectInvalidChangeUsernameRequest() throws Exception {
 
-        UpdateUsernameReq request =
-                UpdateUsernameReq.builder()
-                        .currentUsername("")
-                        .newUsername("")
-                        .build();
+        UpdateUsernameReq request = UpdateUsernameReq.builder().newUsername("").build();
 
-        mockMvc.perform(post("/auth/v1/change/username")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/auth/v1/change/username").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isBadRequest());
 
     }
 
     @Test
     void shouldRejectInvalidRefreshTokenRequest() throws Exception {
 
-        RefreshTokenRequestDTO dto =
-                new RefreshTokenRequestDTO(null);
+        RefreshTokenRequestDTO dto = new RefreshTokenRequestDTO(null);
 
-        mockMvc.perform(post("/auth/v1/refreshToken")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/auth/v1/refreshToken").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(dto))).andExpect(status().isBadRequest());
 
     }
 
 
+    @Test
+    void shouldAcceptForgotPasswordRequest() throws Exception {
+        ForgotPasswordRequest forgotPasswordRequest = new ForgotPasswordRequest("john@test.com");
+
+        mockMvc.perform(post("/auth/v1/forgot-password").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(forgotPasswordRequest))).andExpect(status().isOk()).andExpect(content().string("Password reset email sent"));
+        verify(userDetailsService).forgotPassword("john@test.com");
+    }
+
+    @Test
+    void shouldRejectForgotPasswordWithInvalidEmail() throws Exception {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("not-an-email");
+        mockMvc.perform(post("/auth/v1/forgot-password").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldResetPasswordSuccessfully() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest("token-123", "new-Password-123!");
+
+        mockMvc.perform(post("/auth/v1/reset-password").contentType(MediaType.APPLICATION_JSON).content(objectMapper.writeValueAsString(request))).andExpect(status().isOk()).andExpect(content().string("Password updated successfully"));
+
+        verify(userDetailsService).resetPassword("token-123", "new-Password-123!");
+    }
 }

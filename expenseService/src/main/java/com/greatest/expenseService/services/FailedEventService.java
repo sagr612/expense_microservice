@@ -22,38 +22,24 @@ public class FailedEventService {
     private final ObjectMapper objectMapper;
 
     @Transactional
-    public void save(ExpenseDto expense, String topic, int partition, long offset, String errorMessage, String stackTrace) {
-        String payload;
-        try {
-            payload = objectMapper.writeValueAsString(expense);
-            log.info("saving expense to failed event payload {}", payload);
-        } catch (JsonProcessingException e) {
-            log.error("Unable to serialize failed event", e);
-            payload = "Unable to serialize payload";
+    public void saveRaw(String rawPayload, String topic, int partition, long offset, String errorMessage, String stackTrace) {
+        FailedEvents failedEvents = new FailedEvents();
+        failedEvents.setTopic(topic);
+        failedEvents.setPartition(partition);
+        failedEvents.setOffset(offset);
+        failedEvents.setEventType("EXPENSE_CREATED");
+        failedEvents.setPayload(rawPayload != null ? rawPayload : "null");
+
+        if (errorMessage != null && errorMessage.length() > 1000) {
+            errorMessage = errorMessage.substring(0, 1000);
         }
-        FailedEvents failedEvent = new FailedEvents();
-        failedEvent.setTopic(topic);
-
-        failedEvent.setPartition(partition);
-
-        failedEvent.setOffset(offset);
-
-        failedEvent.setEventType("EXPENSE_CREATED");
-
-        failedEvent.setPayload(payload);
-
-        failedEvent.setErrorMessage(errorMessage);
-
-        failedEvent.setStackTrace(stackTrace);
-
-        failedEvent.setRetryCount(0);
-
-        failedEvent.setStatus(FailedEventStatus.FAILED);
-
-        failedEvent.setCreatedAt(LocalDateTime.now());
-
-        failedEvent.setUpdatedAt(LocalDateTime.now());
-        repository.save(failedEvent);
+        failedEvents.setErrorMessage(errorMessage);
+        failedEvents.setStackTrace(stackTrace);
+        failedEvents.setRetryCount(0);
+        failedEvents.setStatus(FailedEventStatus.FAILED);
+        failedEvents.setCreatedAt(LocalDateTime.now());
+        failedEvents.setUpdatedAt(LocalDateTime.now());
+        repository.save(failedEvents);
     }
 
 }

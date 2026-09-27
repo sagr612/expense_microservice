@@ -7,19 +7,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.kafka.support.SendResult;
-import org.springframework.messaging.Message;
 import org.springframework.test.util.ReflectionTestUtils;
-import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 
-import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,49 +22,53 @@ class UserInfoProducerTest {
 
     @Mock
     private KafkaTemplate<String, UserInfoEvent> kafkaTemplate;
+    @Mock
+    private OutboxRepository outboxRepository;
+    @Mock
+    private OutboxEventPublisher outboxEventPublisher;
 
 
     @Mock
-    private OutboxRepository outboxRepository;
+    OutboxClaimService outboxClaimService;
 
     @Mock
     private ObjectMapper objectMapper;
     @InjectMocks
     private UserInfoProducer producer;
 
-    @BeforeEach
-    void setup() {
-        ReflectionTestUtils.setField(producer, "topic", "user.created");
+
+    private OutboxEvent pending(String id) {
+        return OutboxEvent.builder()
+                .id(id)
+                .aggregateId("user-1")
+                .eventType("USER_CREATED")
+                .payload("{\"userId\":\"user-1\"}")
+                .status(OutboxEvent.OutboxStatus.PENDING)
+                .attemptCount(0)
+                .nextRetryAt(Instant.now().minusSeconds(1))
+                .createdAt(Instant.now())
+                .build();
+    }
+
+
+
+    @Test
+    void publishPendingEvents_doesNothing_whenNoPendingEvents() {
+        when(outboxClaimService.claimEvents(any(), any(), any(Integer.class))).thenReturn(List.of());
+        producer.publishPendingEvents();
+        verifyNoInteractions(outboxEventPublisher);
     }
 
     @Test
-    void publishPendingEvents_shouldPublishAndMarkAsPublished() throws Exception {
-        // given
-        UserInfoEvent payload = UserInfoEvent.builder()
-                .userId("u1").firstName("A").lastName("B")
-                .email("a@b.com").phoneNumber("9999999999").build();
-        String json = new ObjectMapper().writeValueAsString(payload);
-        OutboxEvent event = OutboxEvent.builder()
-                .id("event-1").aggregateId("u1").eventType("USER_CREATED")
-                .payload(json).published(false).build();
+    void publishPendingEvents_delegatesEachEventToPublisher() {
+        OutboxEvent event1 = pending("event-1");
+        OutboxEvent event2 = pending("event-2");
 
-        when(outboxRepository.findTop50ByPublishedFalseOrderByCreatedAtAsc())
-                .thenReturn(List.of(event));
-        when(objectMapper.readValue(anyString(), eq(UserInfoEvent.class)))
-                .thenReturn(payload);
+        when(outboxClaimService.claimEvents(any(), any(), any(Integer.class))).thenReturn(List.of(event1, event2));
 
-        // Mock the CompletableFuture return so .get() doesn't hang
-        CompletableFuture<SendResult<String, UserInfoEvent>> future = CompletableFuture
-                .completedFuture(mock(SendResult.class));
-        when(kafkaTemplate.send(anyString(), anyString(), any())).thenReturn(future);
-
-        // when
         producer.publishPendingEvents();
 
-        // then
-        verify(kafkaTemplate).send(anyString(), eq("u1"), eq(payload));
-        verify(outboxRepository).save(argThat(OutboxEvent::isPublished));
+        verify(outboxEventPublisher).processOne(event1);
+        verify(outboxEventPublisher).processOne(event2);
     }
-
-
 }

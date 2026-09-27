@@ -1,0 +1,33 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Calculating task graph as no cached configuration is available for tasks: :app:test
+> Task :app:processResources UP-TO-DATE
+> Task :app:processTestResources UP-TO-DATE
+> Task :app:compileJava
+> Task :app:classes
+> Task :app:compileTestJava
+> Task :app:testClasses
+> Task :app:test
+
+2026-09-24 21:10:50.102 [pool-3-thread-2] WARN  [app] [6ab5446bc7f78ef79f02dc36b275d985/9f02dc36b275d985] o.e.eventProducer.OutboxEventPublisher   : Outbox event 684c6751-5a62-4573-940e-6f90b3f10121 failed (attempt 1/10); next retry at 2026-09-24T15:40:51.102827700Z. Cause: Producer closed while send in progress
+2026-09-24 21:10:51.154 [ionShutdownHook] INFO  [app] [no-trace/no-span] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+2026-09-24 21:10:51.180 [ionShutdownHook] INFO  [app] [no-trace/no-span] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown initiated...
+2026-09-24 21:10:51.186 [ionShutdownHook] INFO  [app] [no-trace/no-span] com.zaxxer.hikari.HikariDataSource       : HikariPool-1 - Shutdown completed.
+2026-09-24 21:10:51.199 [ionShutdownHook] INFO  [app] [no-trace/no-span] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+Hibernate: drop table if exists outbox_events cascade 
+Hibernate: drop table if exists password_reset_tokens cascade 
+Hibernate: drop table if exists tokens cascade 
+Hibernate: drop table if exists user_roles cascade 
+Hibernate: drop table if exists users cascade 
+
+[Incubating] Problems report is available at: file:///C:/Users/greatest/Work-dev/backend/expenseTracker/AuthService1/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 2m 54s
+5 actionable tasks: 3 executed, 2 up-to-date
+Configuration cache entry stored.

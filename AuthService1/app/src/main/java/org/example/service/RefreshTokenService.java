@@ -3,11 +3,13 @@ package org.example.service;
 import lombok.RequiredArgsConstructor;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
+import org.example.entities.UserRole;
+import org.example.exceptions.InvalidTokenException;
 import org.example.exceptions.TokenExpiredException;
 import org.example.model.RefreshTokenResponse;
 import org.example.repository.RefreshTokenRepository;
 import org.example.repository.UserRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.example.response.JwtResponseDTO;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -28,6 +30,7 @@ import java.util.UUID;
 public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
+    private final JwtService jwtService;
 
     @Value("${jwt.refresh-expiration:604800000}")
     private Long refreshTokenExpiration;
@@ -41,19 +44,18 @@ public class RefreshTokenService {
             throw new IllegalStateException(e);
         }
     }
+
     @Transactional
     public RefreshTokenResponse createRefreshToken(String username) {
-        UserInfo userInfo = userRepository.findByUsername(username);
+        UserInfo userInfo = userRepository.findByUsername(username).orElseThrow(()-> new UsernameNotFoundException("User not found"));
 
         if (userInfo == null) {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
-        refreshTokenRepository.deleteByUserInfo(userInfo);
-
-//        Optional<RefreshToken> existingToken = refreshTokenRepository.findByUserInfo(userInfo);
-//        existingToken.ifPresent(refreshTokenRepository::delete);
-        refreshTokenRepository.flush();
+//        refreshTokenRepository.deleteByUserInfo(userInfo);
+//
+//        refreshTokenRepository.flush();
 
         String rawToken = UUID.randomUUID().toString();
         String tokenHash = hash(rawToken);
@@ -63,13 +65,11 @@ public class RefreshTokenService {
                 .tokenHash(tokenHash)
                 .expiryDate(Instant.now().plusMillis(refreshTokenExpiration))
                 .build();
-        RefreshToken saved=refreshTokenRepository.save(refreshToken);
+        RefreshToken saved = refreshTokenRepository.save(refreshToken);
 
 
-        return  RefreshTokenResponse.builder().token(rawToken).expiryDate(saved.getExpiryDate()).build();
+        return RefreshTokenResponse.builder().token(rawToken).expiryDate(saved.getExpiryDate()).build();
     }
-
-
 
 
     public Optional<RefreshToken> findByToken(String token) {
@@ -92,5 +92,21 @@ public class RefreshTokenService {
 
     public void delete(RefreshToken oldToken) {
         refreshTokenRepository.delete(oldToken);
+    }
+
+    @Transactional
+    public JwtResponseDTO rotateRefreshToken(String token) {
+        RefreshToken oldToken = findByToken(token)
+                .orElseThrow(() -> new InvalidTokenException("Refresh token not found"));
+
+        verifyExpirationAndDeleteIfExpired(oldToken);
+
+        delete(oldToken);
+
+        UserInfo user = oldToken.getUserInfo();
+        RefreshTokenResponse newRefresh = createRefreshToken(user.getUsername());
+        String newAccess = jwtService.generateToken(user.getUsername(), user.getUserId(),
+                user.getRoles().stream().map(UserRole::name).toList());
+        return JwtResponseDTO.builder().token(newRefresh.getToken()).accessToken(newAccess).build();
     }
 }

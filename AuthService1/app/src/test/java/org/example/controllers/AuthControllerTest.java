@@ -21,6 +21,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.authentication.TestingAuthenticationToken;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -244,7 +245,7 @@ class AuthControllerTest {
                 .getContext()
                 .setAuthentication(authentication);
 
-        when(userDetailsService.getUserByUsername("john"))
+        when(userDetailsService.getUserByUserId("john"))
                 .thenReturn("user-1");
 
         mockMvc.perform(get("/auth/v1/ping"))
@@ -252,7 +253,7 @@ class AuthControllerTest {
                 .andExpect(content().string("user-1"));
 
         verify(userDetailsService)
-                .getUserByUsername("john");
+                .getUserByUserId("john");
 
     }
 
@@ -282,8 +283,8 @@ class AuthControllerTest {
                 .getContext()
                 .setAuthentication(authentication);
 
-        when(userDetailsService.getUserByUsername("john"))
-                .thenReturn(null);
+        when(userDetailsService.getUserByUserId("john"))
+                .thenThrow(new UsernameNotFoundException("User not found"));
 
         mockMvc.perform(get("/auth/v1/ping"))
                 .andExpect(status().isNotFound());

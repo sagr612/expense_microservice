@@ -5,6 +5,7 @@ import com.greatest.notification_service.repositories.PushTokenRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -14,6 +15,7 @@ public class PushTokenService {
     private final PushTokenRepository pushTokenRepository;
     private final ExpoPushService expoPushService;
 
+    @Transactional
     public void saveToken(String userId, String expoToken) {
         if(userId == null || expoToken == null) {
             log.error("Error saving push token");
@@ -23,6 +25,7 @@ public class PushTokenService {
                 .findByUserId(userId)
                 .orElse(PushToken.builder().userId(userId).build());
         token.setExpoToken(expoToken);
+        pushTokenRepository.deleteByExpoToken(expoToken);
         pushTokenRepository.save(token);
         log.info("Push token saved for userId: {}", userId);
     }

@@ -8,12 +8,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import sagar.userService.UserLockManager;
 import sagar.userService.dtos.UserInfoDto;
-import sagar.userService.dtos.UserProfileImageResponse;
+import sagar.userService.dtos.request.CreateUserRequest;
+import sagar.userService.dtos.request.UpdateUserRequest;
+import sagar.userService.dtos.response.UserProfileImageResponse;
+import sagar.userService.dtos.response.UserResponse;
 import sagar.userService.entities.UserInfo;
 import sagar.userService.producer.UserDeletedProducer;
 import sagar.userService.repository.UserRepository;
 
-import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 
@@ -55,10 +57,12 @@ class UserServiceTest {
     @Test
     void createUser_acquiresLockOnUserId_andDelegatesToWriteService() {
         stubLockManagerToExecuteAction();
-        UserInfoDto dto = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
-        when(userWriteService.createUserInternal(dto)).thenReturn(dto);
+        CreateUserRequest dto = CreateUserRequest.builder().userId("user-1").email("a@b.com").build();
+        UserResponse response = UserResponse.builder().userId("user-1").email("a@b.com").build();
 
-        UserInfoDto result = userService.createUser(dto);
+        when(userWriteService.createUserInternal(dto)).thenReturn(response);
+
+        UserResponse result = userService.createUser(dto);
 
         assertThat(result.getUserId()).isEqualTo("user-1");
         verify(userLockManager).withUserLock(eq("user-1"), any(Supplier.class));
@@ -68,10 +72,12 @@ class UserServiceTest {
     @Test
     void updateUser_acquiresLockOnUserId_andDelegatesToWriteService() {
         stubLockManagerToExecuteAction();
-        UserInfoDto dto = UserInfoDto.builder().userId("user-1").email("a@b.com").build();
-        when(userWriteService.updateUserInternal("user-1", dto)).thenReturn(dto);
+        UpdateUserRequest dto = UpdateUserRequest.builder().email("a@b.com").build();
+       UserResponse response = UserResponse.builder().userId("user-1").email("a@b.com").build();
 
-        UserInfoDto result = userService.updateUser("user-1", dto);
+        when(userWriteService.updateUserInternal("user-1", dto)).thenReturn(response);
+
+        UserResponse result = userService.updateUser("user-1", dto);
 
         assertThat(result.getUserId()).isEqualTo("user-1");
         verify(userLockManager).withUserLock(eq("user-1"), any(Supplier.class));
@@ -96,7 +102,7 @@ class UserServiceTest {
         UserInfo entity = UserInfo.builder().userId("user-1").email("a@b.com").build();
         when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(entity));
 
-        UserInfoDto result = userService.getUserByUserId("user-1");
+        UserResponse result = userService.getUserByUserId("user-1");
 
         assertThat(result.getUserId()).isEqualTo("user-1");
         assertThat(result.getEmail()).isEqualTo("a@b.com");
@@ -116,7 +122,7 @@ class UserServiceTest {
         UserInfo entity = UserInfo.builder().userId("user-1").email("a@b.com").build();
         when(userRepository.findByEmail("a@b.com")).thenReturn(Optional.of(entity));
 
-        UserInfoDto result = userService.getUserByEmail("a@b.com");
+        UserResponse result = userService.getUserByEmail("a@b.com");
 
         assertThat(result.getEmail()).isEqualTo("a@b.com");
     }
@@ -146,133 +152,34 @@ class UserServiceTest {
     }
 
     @Test
-    void updateProfileImage_uploadsNewImage_andDeletesOldOne_whenOldImageExists() {
+    void updateProfileImage_acquiresLock_andDelegatesToWriteService() {
         stubLockManagerToExecuteAction();
-
-        UserInfo user = UserInfo.builder()
-                .userId("user-1")
-                .profilePic("old-url")
-                .profileImagePublicId("old-public-id")
-                .build();
-        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
-
-        MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
-        Map<String, Object> uploadResult = Map.of(
-                "secure_url", "new-url",
-                "public_id", "new-public-id");
-        when(cloudinaryService.upload(file)).thenReturn(uploadResult);
-
-        UserProfileImageResponse response = userService.updateProfileImage("user-1", file);
-
-        assertThat(response.userId()).isEqualTo("user-1");
-        assertThat(response.profileImageUrl()).isEqualTo("new-url");
-
-        // verify ordering intent: upload+save happened, THEN the old image was deleted
-        verify(userRepository).save(user);
-        verify(cloudinaryService).delete("old-public-id");
-        assertThat(user.getProfilePic()).isEqualTo("new-url");
-        assertThat(user.getProfileImagePublicId()).isEqualTo("new-public-id");
-    }
-
-    @Test
-    void updateProfileImage_skipsDelete_whenUserHadNoPreviousImage() {
-        stubLockManagerToExecuteAction();
-        UserInfo user = UserInfo.builder()
-                .userId("user-1")
-                .profilePic(null)
-                .profileImagePublicId(null)
-                .build();
-        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
-
-        MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
-        when(cloudinaryService.upload(file)).thenReturn(
-                Map.of("secure_url", "new-url", "public_id", "new-public-id"));
-
-        userService.updateProfileImage("user-1", file);
-
-        verify(cloudinaryService, never()).delete(any());
-    }
-
-    @Test
-    void updateProfileImage_doesNotSaveOrDelete_whenUploadFails() {
-        stubLockManagerToExecuteAction();
-        UserInfo user = UserInfo.builder()
-                .userId("user-1")
-                .profileImagePublicId("old-public-id")
-                .build();
-        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
-
-        MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
-        when(cloudinaryService.upload(file)).thenThrow(new RuntimeException("Cloudinary upload failed"));
-
-        assertThatThrownBy(() -> userService.updateProfileImage("user-1", file))
-                .isInstanceOf(RuntimeException.class);
-
-        // this is the regression test for the upload-before-delete fix — if upload fails,
-        // the user must keep their old image: no save, and definitely no delete of the old one
-        verify(userRepository, never()).save(any());
-        verify(cloudinaryService, never()).delete(any());
-    }
-
-    @Test
-    void updateProfileImage_swallowsDeleteFailure_andStillReturnsSuccessResponse() {
-        stubLockManagerToExecuteAction();
-
-        UserInfo user = UserInfo.builder()
-                .userId("user-1")
-                .profileImagePublicId("old-public-id")
-                .build();
-        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
-
-        MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
-        when(cloudinaryService.upload(file)).thenReturn(
-                Map.of("secure_url", "new-url", "public_id", "new-public-id"));
-        doThrow(new RuntimeException("Cloudinary delete failed"))
-                .when(cloudinaryService).delete("old-public-id");
-
-        // must NOT propagate — the new image is already safely saved, so a cleanup
-        // failure on the OLD image should not fail the whole request1
-        UserProfileImageResponse response = userService.updateProfileImage("user-1", file);
-
-        assertThat(response.profileImageUrl()).isEqualTo("new-url");
-        verify(userRepository).save(user);
-    }
-
-    @Test
-    void updateProfileImage_throwsIllegalArgument_whenUserNotFound() {
-        stubLockManagerToExecuteAction();
-        when(userRepository.findByUserId("missing")).thenReturn(Optional.empty());
-        MockMultipartFile file = new MockMultipartFile("image", "avatar.png", "image/png", "bytes".getBytes());
-
-        assertThatThrownBy(() -> userService.updateProfileImage("missing", file))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("missing");
-
-        verifyNoInteractions(cloudinaryService);
-    }
-    @Test
-    void updateProfileImage_deletesOrphanedNewImage_whenDbSaveFails() {
-        stubLockManagerToExecuteAction();
-        UserInfo user = UserInfo.builder()
-                .userId("user-1")
-                .profileImagePublicId("old-public-id")
-                .build();
-        when(userRepository.findByUserId("user-1")).thenReturn(Optional.of(user));
 
         MockMultipartFile file = new MockMultipartFile(
-                "image", "avatar.png", "image/png", "bytes".getBytes());
-        when(cloudinaryService.upload(file)).thenReturn(
-                Map.of("secure_url", "new-url", "public_id", "new-public-id"));
-        when(userRepository.save(any())).thenThrow(new RuntimeException("DB down"));
+                "image",
+                "avatar.png",
+                "image/png",
+                "bytes".getBytes()
+        );
 
-        assertThatThrownBy(() -> userService.updateProfileImage("user-1", file))
-                .isInstanceOf(RuntimeException.class);
+        UserProfileImageResponse expected =
+                new UserProfileImageResponse("user-1", "new-url");
 
-        // The critical compensating-action assertion: DB failed AFTER upload succeeded,
-        // so the new (orphaned) image must be deleted from Cloudinary.
-        verify(cloudinaryService).delete("new-public-id");
-        // The OLD image must NOT be touched.
-        verify(cloudinaryService, never()).delete("old-public-id");
+        when(userWriteService.updateProfileImageInternal("user-1", file))
+                .thenReturn(expected);
+
+        UserProfileImageResponse result =
+                userService.updateProfileImage("user-1", file);
+
+        assertThat(result.profileImageUrl()).isEqualTo("new-url");
+
+        verify(userLockManager)
+                .withUserLock(eq("user-1"), any(Supplier.class));
+
+        verify(userWriteService)
+                .updateProfileImageInternal("user-1", file);
     }
+
+
 
 }

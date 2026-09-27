@@ -3,6 +3,7 @@ package org.example.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.example.entities.UserInfo;
 import org.example.exceptions.UnauthorizedException;
 import org.example.model.RefreshTokenResponse;
 import org.example.model.UserInfoDto;
@@ -32,7 +33,7 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<JwtResponseDTO> signUp(@Valid @RequestBody UserInfoDto userInfoDto) {
 
-        org.example.entities.UserInfo user = userDetailsService.signupUser(userInfoDto);
+        UserInfo user = userDetailsService.signupUser(userInfoDto);
         RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(userInfoDto.getUsername());
         String jwtToken = jwtService.generateToken(
                 user.getUsername(), user.getUserId(),
@@ -56,11 +57,8 @@ public class AuthController {
             throw new UnauthorizedException("User not authenticated");
         }
 
-        String userId = userDetailsService.getUserByUsername(authentication.getName());
+        String userId = userDetailsService.getUserByUserId(authentication.getName());
 
-        if (userId == null) {
-            throw new UsernameNotFoundException("User not found");
-        }
 
         return ResponseEntity.ok(userId);
     }

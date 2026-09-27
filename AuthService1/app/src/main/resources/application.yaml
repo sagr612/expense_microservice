@@ -50,6 +50,10 @@ spring:
 
     topic-json:
       name: user.events
+
+    topics:
+      user-deleted: user.deleted
+
     listener:
       observation-enabled: true
 
@@ -105,3 +109,9 @@ eureka:
       defaultZone: ${EUREKA_URI:http://localhost:8761/eureka/}
   instance:
     prefer-ip-address: true
+
+
+brevo:
+  api-key: ${BREVO_API_KEY}
+  sender-email: ${BREVO_SENDER_EMAIL:noreply@expensetracker.com}
+  sender-name: ${BREVO_SENDER_NAME:Expense Tracker}

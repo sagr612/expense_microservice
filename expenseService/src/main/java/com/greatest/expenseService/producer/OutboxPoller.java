@@ -3,10 +3,13 @@ package com.greatest.expenseService.producer;
 import com.greatest.expenseService.entities.OutboxEvent;
 import com.greatest.expenseService.entities.OutboxEvent.OutboxStatus;
 import com.greatest.expenseService.repository.OutboxRepository;
+import com.greatest.expenseService.services.OutboxClaimService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,20 +17,18 @@ import java.util.List;
 @RequiredArgsConstructor
 @Slf4j
 public class OutboxPoller {
-    private final OutboxRepository outboxRepository;
+    private final OutboxClaimService outboxClaimService;
     private final OutboxEventPublisher outboxEventPublisher;
 
     @Scheduled(fixedDelayString = "${outbox.poller.fixed-delay-ms:2000}")
     public void publishPendingEvents() {
-        List<OutboxEvent> pending = outboxRepository
-                .findTop50ByStatusAndNextRetryAtBeforeOrderByCreatedAtAsc(
-                        OutboxStatus.PENDING, Instant.now());
+        List<OutboxEvent> claimed = outboxClaimService.claimEvents(Instant.now(), Duration.ofMinutes(1), 50);
 
-        if (pending.isEmpty()) return;
+        if (claimed.isEmpty()) return;
 
-        log.debug("Outbox poller: {} events to process", pending.size());
+        log.debug("Outbox poller: {} events to process", claimed.size());
 
-        for (OutboxEvent event : pending) {
+        for (OutboxEvent event : claimed) {
             outboxEventPublisher.processOne(event);
         }
     }

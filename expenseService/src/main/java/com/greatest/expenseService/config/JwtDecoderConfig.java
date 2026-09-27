@@ -26,8 +26,6 @@ public class JwtDecoderConfig {
     public JwtDecoder jwtDecoder() {
         byte[] keyBytes = Decoders.BASE64.decode(base64Secret);
         SecretKeySpec key = new SecretKeySpec(keyBytes, "HmacSHA256");
-        return NimbusJwtDecoder.withSecretKey(key)
-                .macAlgorithm(MacAlgorithm.HS256)
-                .build();
+        return NimbusJwtDecoder.withSecretKey(key).macAlgorithm(MacAlgorithm.HS256).build();
     }
 }

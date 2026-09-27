@@ -47,14 +47,10 @@ dependencies {
     implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
-//    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
-//    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.3.0'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
-    // Source: https://mvnrepository.com/artifact/org.redisson/redisson
     implementation("org.redisson:redisson:3.52.0")
     implementation 'io.micrometer:micrometer-tracing-bridge-brave'
     implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
-    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
     // Data + DB
@@ -78,8 +74,6 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.kafka:spring-kafka-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-    testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.kafka:spring-kafka-test'
 
     // Testcontainers — only needed if you want the integration test
     testImplementation 'org.testcontainers:junit-jupiter'

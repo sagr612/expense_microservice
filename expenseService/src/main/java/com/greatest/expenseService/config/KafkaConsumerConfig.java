@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.*;
+import org.springframework.kafka.listener.CommonLoggingErrorHandler;
 import org.springframework.kafka.listener.ContainerProperties;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
@@ -32,7 +33,6 @@ public class KafkaConsumerConfig {
     private String bootstrapServers;
 
     private final KafkaProperties kafkaProperties;
-    // ── Consumer factory ──────────────────────────────────────────────────────
 
     @Bean
     public ConsumerFactory<String, ExpenseDto> consumerFactory() {
@@ -48,31 +48,17 @@ public class KafkaConsumerConfig {
 
     @Bean
     public DefaultErrorHandler errorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
-    // Publishes to <original-topic>.DLT automatically (e.g. expense.created-dlt)
-        // The failed record + exception info is attached as Kafka headers.
-        DeadLetterPublishingRecoverer recoverer =
-                new DeadLetterPublishingRecoverer(
-                        kafkaTemplate,
-                        (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition())
-                );
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition()));
 
-        // 3 attempts total: initial delivery + 2 retries
-        // Waits 2s before retry 1, 4s before retry 2 (doubles each time, max 10s gap)
         ExponentialBackOff backOff = new ExponentialBackOff(2_000L, 2.0);
-        backOff.setMaxAttempts(2);          // retries (not counting first attempt)
+        backOff.setMaxAttempts(2);
         backOff.setMaxInterval(10_000L);
 
         DefaultErrorHandler handler = new DefaultErrorHandler(recoverer, backOff);
 
-        // Don't retry on these — they will never succeed
-        handler.addNotRetryableExceptions(
-                org.springframework.kafka.support.serializer.DeserializationException.class,
-                IllegalArgumentException.class
-        );
+        handler.addNotRetryableExceptions(org.springframework.kafka.support.serializer.DeserializationException.class, IllegalArgumentException.class);
 
-        handler.setRetryListeners((record, ex, deliveryAttempt) ->
-                log.warn("Retry attempt {} for record offset={} partition={}: {}",
-                        deliveryAttempt, record.offset(), record.partition(), ex.getMessage()));
+        handler.setRetryListeners((record, ex, deliveryAttempt) -> log.warn("Retry attempt {} for record offset={} partition={}: {}", deliveryAttempt, record.offset(), record.partition(), ex.getMessage()));
 
         return handler;
     }
@@ -80,65 +66,61 @@ public class KafkaConsumerConfig {
     // ── Listener container factory ────────────────────────────────────────────
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<String, ExpenseDto>
-    kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
+    public ConcurrentKafkaListenerContainerFactory<String, ExpenseDto> kafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
 
-        ConcurrentKafkaListenerContainerFactory<String, ExpenseDto> factory =
-                new ConcurrentKafkaListenerContainerFactory<>();
+        ConcurrentKafkaListenerContainerFactory<String, ExpenseDto> factory = new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
         factory.setCommonErrorHandler(errorHandler);
-        // Manual offset commits so failed records are not auto-committed
-        factory.getContainerProperties()
-                .setObservationEnabled(true);
-        factory.getContainerProperties()
-                .setAckMode(org.springframework.kafka.listener.ContainerProperties.AckMode.RECORD);
+        factory.getContainerProperties().setObservationEnabled(true);
+        factory.getContainerProperties().setAckMode(org.springframework.kafka.listener.ContainerProperties.AckMode.RECORD);
         return factory;
     }
 
+
     @Bean
-    public ConsumerFactory<String, UserDeletedEvent>
-    userDeletedConsumerFactory() {
+    public ConcurrentKafkaListenerContainerFactory<String, String> dltKafkaListenerContainerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+
+        ConsumerFactory<String, String> factory = new DefaultKafkaConsumerFactory<>(props);
+
+        ConcurrentKafkaListenerContainerFactory<String, String> containerFactory = new ConcurrentKafkaListenerContainerFactory<>();
+
+        containerFactory.setConsumerFactory(factory);
+        containerFactory.setCommonErrorHandler(new CommonLoggingErrorHandler());
+        containerFactory.getContainerProperties().setObservationEnabled(true);
+        return containerFactory;
+    }
+
+
+    @Bean
+    public ConsumerFactory<String, UserDeletedEvent> userDeletedConsumerFactory() {
 
         Map<String, Object> props = new HashMap<>(kafkaProperties.buildConsumerProperties());
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
-        JsonDeserializer<UserDeletedEvent>
-                deserializer =
-                new JsonDeserializer<>(
-                        UserDeletedEvent.class
-                );
+        JsonDeserializer<UserDeletedEvent> deserializer = new JsonDeserializer<>(UserDeletedEvent.class);
 
         deserializer.addTrustedPackages("*");
         deserializer.setUseTypeHeaders(false);
 
-        return new DefaultKafkaConsumerFactory<>(
-                props,
-                new StringDeserializer(),
-                deserializer
-        );
+        return new DefaultKafkaConsumerFactory<>(props, new StringDeserializer(), deserializer);
     }
 
     @Bean
-    public ConcurrentKafkaListenerContainerFactory<
-            String,
-            UserDeletedEvent>
-    userDeletedKafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
+    public ConcurrentKafkaListenerContainerFactory<String, UserDeletedEvent> userDeletedKafkaListenerContainerFactory(DefaultErrorHandler errorHandler) {
 
-        ConcurrentKafkaListenerContainerFactory<
-                String,
-                UserDeletedEvent>
-                factory =
-                new ConcurrentKafkaListenerContainerFactory<>();
+        ConcurrentKafkaListenerContainerFactory<String, UserDeletedEvent> factory = new ConcurrentKafkaListenerContainerFactory<>();
 
-        factory.setConsumerFactory(
-                userDeletedConsumerFactory()
-        );
-        factory.getContainerProperties()
-                .setObservationEnabled(true);
+        factory.setConsumerFactory(userDeletedConsumerFactory());
+        factory.getContainerProperties().setObservationEnabled(true);
         factory.setCommonErrorHandler(errorHandler);
-        factory.getContainerProperties()
-                .setAckMode(
-                        ContainerProperties.AckMode.RECORD
-                );
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
         return factory;
     }
+
+
 }

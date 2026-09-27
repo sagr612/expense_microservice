@@ -1,0 +1,27 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+> Task :compileJava
+> Task :processResources UP-TO-DATE
+> Task :classes
+> Task :compileTestJava
+> Task :processTestResources UP-TO-DATE
+> Task :testClasses
+
+> Task :test
+
+FlywayMigrationIntegrationTest > initializationError FAILED
+    java.lang.IllegalStateException at DockerClientProviderStrategy.java:274
+
+OutboxConcurrencyIntegrationTest > initializationError FAILED
+    java.lang.IllegalStateException at DockerClientProviderStrategy.java:229
+
+2026-09-22 19:48:09.022 [ionShutdownHook] INFO  [app] [no-trace/no-span] j.LocalContainerEntityManagerFactoryBean : Closing JPA EntityManagerFactory for persistence unit 'default'
+Hibernate: drop table if exists failed_events cascade 
+Hibernate: drop table if exists outbox_events cascade 
+Hibernate: drop table if exists processed_events cascade 
+Hibernate: drop table if exists users cascade 
+
+> Task :test
+
+> Task :test FAILED
+5 actionable tasks: 3 executed, 2 up-to-date

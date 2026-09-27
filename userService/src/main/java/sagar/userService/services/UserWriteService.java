@@ -4,20 +4,24 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import sagar.userService.dtos.UserDeletedEvent;
+import org.springframework.web.multipart.MultipartFile;
+import sagar.userService.dtos.event.UserDeletedEvent;
 import sagar.userService.dtos.UserInfoDto;
+import sagar.userService.dtos.request.UpdateUserRequest;
+import sagar.userService.dtos.response.UserProfileImageResponse;
 import sagar.userService.entities.OutboxEvent;
 import sagar.userService.entities.UserInfo;
 import sagar.userService.exceptions.DuplicateResourceException;
-import sagar.userService.producer.UserDeletedProducer;
 import sagar.userService.repository.OutboxRepository;
 import sagar.userService.repository.UserRepository;
+import sagar.userService.dtos.request.CreateUserRequest;
+import sagar.userService.dtos.request.UpdateUserRequest;
+import sagar.userService.dtos.response.UserResponse;
 
-import java.util.List;
-import java.util.UUID;
+
+import java.util.Map;
 
 
 @Service
@@ -28,6 +32,7 @@ public class UserWriteService {
     private final UserDomainService userDomainService;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final CloudinaryService cloudinaryService;
 
     @Transactional
     public UserInfoDto createOrUpdateUserInternal(UserInfoDto userInfoDto) {
@@ -46,30 +51,29 @@ public class UserWriteService {
     }
 
     @Transactional
-    public UserInfoDto createUserInternal(UserInfoDto dto) {
+    public UserResponse createUserInternal(CreateUserRequest dto) {
         log.info("Creating user: {}", dto.getUserId());
-        userDomainService.validateUserDto(dto);
+
         if (userRepository.findByUserId(dto.getUserId()).isPresent()) {
             throw new DuplicateResourceException("User already exists: " + dto.getUserId());
         }
         UserInfo entity = userDomainService.createNewUser(dto);
         UserInfo saved = userRepository.save(entity);
         log.info("User created: {}", saved.getUserId());
-        return UserInfoDto.fromEntity(saved);
+        return UserResponse.fromEntity(saved);
     }
 
     @Transactional
-    public UserInfoDto updateUserInternal(String userId, UserInfoDto dto) {
+    public UserResponse updateUserInternal(String userId, UpdateUserRequest dto) {
         log.info("Updating user: {}", userId);
         UserInfo existing = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found: " + userId));
-        // Ignore any userId in the body; path is source of truth.
-        dto.setUserId(userId);
-        userDomainService.validateUserDto(dto);
+
+//        userDomainService.validateUserDto(dto);
         UserInfo updated = userDomainService.updateExistingUser(existing, dto);
         UserInfo saved = userRepository.save(updated);
         log.info("User updated: {}", saved.getUserId());
-        return UserInfoDto.fromEntity(saved);
+        return UserResponse.fromEntity(saved);
     }
 
 
@@ -94,6 +98,49 @@ public class UserWriteService {
                 .build();
 
         outboxRepository.save(event);
+    }
+
+//    @Transactional
+    public UserProfileImageResponse updateProfileImageInternal(String userId, MultipartFile file) {
+        UserInfo user = userRepository.findByUserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
+
+        String oldPublicId = user.getProfileImagePublicId();
+
+        // Upload FIRST — if this throws, the user keeps their old image
+        Map<String, Object> result = cloudinaryService.upload(file);
+        String newPublicId = (String) result.get("public_id");
+        String newUrl = (String) result.get("secure_url");
+
+        try {
+            user.setProfilePic(newUrl);
+            user.setProfileImagePublicId(newPublicId);
+            userRepository.save(user);
+        } catch (RuntimeException dbEx) {
+            // DB save failed → the just-uploaded new image is now orphaned in Cloudinary.
+
+            log.warn("DB save failed after Cloudinary upload; compensating by deleting orphan {}",
+                    newPublicId, dbEx);
+            try {
+                cloudinaryService.delete(newPublicId);
+            } catch (Exception cleanupEx) {
+                log.error("Orphan cleanup ALSO failed for {}. Manual cleanup needed.",
+                        newPublicId, cleanupEx);
+            }
+            throw dbEx;
+        }
+
+        // Only delete the old one after the new one is safely persisted
+        if (oldPublicId != null) {
+            try {
+                cloudinaryService.delete(oldPublicId);
+            } catch (Exception e) {
+                // don't fail the request over cleanup — just log it for a later sweep
+                log.warn("Failed to delete old profile image {} for user {}", oldPublicId, userId, e);
+            }
+        }
+
+        return new UserProfileImageResponse(user.getUserId(), user.getProfilePic());
     }
 
     private String toJson(Object obj) {

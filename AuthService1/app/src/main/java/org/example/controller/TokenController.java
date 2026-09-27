@@ -9,9 +9,7 @@ import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
 import org.example.exceptions.InvalidCredentialsException;
 import org.example.exceptions.InvalidTokenException;
-import org.example.model.PasswordDto;
-import org.example.model.RefreshTokenResponse;
-import org.example.model.UpdateUsernameReq;
+import org.example.model.*;
 import org.example.request.AuthRequestDTO;
 import org.example.request.RefreshTokenRequestDTO;
 import org.example.response.JwtResponseDTO;
@@ -56,18 +54,10 @@ public class TokenController {
 
     @PostMapping("/refreshToken")
     public ResponseEntity<JwtResponseDTO> refreshToken(@Valid @RequestBody RefreshTokenRequestDTO req) {
-        RefreshToken oldToken = refreshTokenService.findByToken(req.getToken())
-                .orElseThrow(() -> new InvalidTokenException("Refresh token not found"));
-        refreshTokenService.verifyExpirationAndDeleteIfExpired(oldToken);
-        UserInfo user = oldToken.getUserInfo();
-//        refreshTokenService.delete(oldToken);
-        RefreshTokenResponse newRefresh = refreshTokenService.createRefreshToken(user.getUsername());
-        String newAccess = jwtService.generateToken(user.getUsername(), user.getUserId(),
-                user.getRoles().stream().map(UserRole::name).toList());
-        return ResponseEntity.ok(JwtResponseDTO.builder()
-                .accessToken(newAccess)
-                .token(newRefresh.getToken())
-                .build());
+
+         JwtResponseDTO response= refreshTokenService.rotateRefreshToken(req.getToken());
+
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/change/passwords")
@@ -79,11 +69,30 @@ public class TokenController {
     }
 
     @PostMapping("/change/username")
-    public ResponseEntity<JwtResponseDTO> changeUsername(@Valid @RequestBody UpdateUsernameReq usernameReq) {
-        JwtResponseDTO response = userDetailsService.changeUsername(usernameReq.getNewUsername(), usernameReq.getCurrentUsername());
+    public ResponseEntity<JwtResponseDTO> changeUsername(Authentication authentication, @Valid @RequestBody UpdateUsernameReq usernameReq) {
+        String userId=authentication.getName();
+
+        JwtResponseDTO response = userDetailsService.changeUsername(usernameReq.getNewUsername(), userId);
 
         return ResponseEntity.ok(response);
     }
+
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<String> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        userDetailsService.forgotPassword(request.email());
+        return ResponseEntity.ok("Password reset email sent");
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<String> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
+
+        userDetailsService.resetPassword(request.token(), request.newPassword());
+
+        return ResponseEntity.ok("Password updated successfully");
+    }
+
+
 
 
 }

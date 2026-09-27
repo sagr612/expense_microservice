@@ -36,8 +36,8 @@ class ExpenseDltConsumerTest {
 
     @Test
     void shouldSaveFailedEvent() {
-
-        ConsumerRecord<String, ExpenseDto> record = new ConsumerRecord<>("expense.create.request.DLT", 0, 15L, "key", expenseDto);
+        String payload = "{\"externalId\":\"ext-123\",\"userId\":\"user-1\"}";
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("expense.create.request.DLT", 0, 15L, "key", payload);
 
         String originalTopic = "expense.create.request";
         int partition = 0;
@@ -45,23 +45,9 @@ class ExpenseDltConsumerTest {
         String exceptionMessage = "Budget exceeded";
         String stackTrace = "stack trace";
 
-        expenseDltConsumer.handleDlt(
-                record,
-                originalTopic,
-                partition,
-                offset,
-                exceptionMessage,
-                stackTrace
-        );
+        expenseDltConsumer.handleDlt(record, originalTopic, partition, offset, exceptionMessage, stackTrace);
 
-        verify(failedEventService).save(
-                expenseDto,
-                originalTopic,
-                partition,
-                offset,
-                exceptionMessage,
-                stackTrace
-        );
+        verify(failedEventService).saveRaw(payload, originalTopic, partition, offset, exceptionMessage, stackTrace);
 
         verifyNoInteractions(expenseService);
     }
@@ -69,26 +55,11 @@ class ExpenseDltConsumerTest {
     @Test
     void shouldSaveFailedEventWhenPayloadIsNull() {
 
-        ConsumerRecord<String, ExpenseDto> record =
-                new ConsumerRecord<>("expense.create.request-dlt", 0, 20L, "key", null);
+        ConsumerRecord<String, String> record = new ConsumerRecord<>("expense.create.request-dlt", 0, 20L, "key", null);
 
-        expenseDltConsumer.handleDlt(
-                record,
-                "expense.create.request",
-                0,
-                20L,
-                "Deserialization failed",
-                "stacktrace"
-        );
+        expenseDltConsumer.handleDlt(record, "expense.create.request", 0, 20L, "Deserialization failed", "stacktrace");
 
-        verify(failedEventService).save(
-                null,
-                "expense.create.request",
-                0,
-                20L,
-                "Deserialization failed",
-                "stacktrace"
-        );
+        verify(failedEventService).saveRaw(null, "expense.create.request", 0, 20L, "Deserialization failed", "stacktrace");
 
         verifyNoInteractions(expenseService);
     }

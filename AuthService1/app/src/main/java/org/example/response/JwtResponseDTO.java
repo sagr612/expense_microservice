@@ -14,5 +14,4 @@ import org.apache.kafka.common.protocol.types.Field;
 public class JwtResponseDTO {
     private String accessToken;
     private String token;
-
 }

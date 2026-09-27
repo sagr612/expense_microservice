@@ -1,4 +1,4 @@
-package sagar.userService.dtos;
+package sagar.userService.dtos.event;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

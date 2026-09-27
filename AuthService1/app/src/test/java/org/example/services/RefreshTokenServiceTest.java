@@ -44,31 +44,29 @@ class RefreshTokenServiceTest {
     @Test
     void shouldCreateRefreshToken() {
         UserInfo user = UserInfo.builder().userId("1").username("john").build();
-        when(userRepository.findByUsername("john")).thenReturn(user);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.of(user));
         when(refreshTokenRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         RefreshTokenResponse token = refreshTokenService.createRefreshToken("john");
         assertNotNull(token);
         assertNotNull(token.getToken());
         verify(userRepository).findByUsername("john");
-        verify(refreshTokenRepository).deleteByUserInfo(user);
-        verify(refreshTokenRepository).flush();
+
         verify(refreshTokenRepository).save(any());
     }
 
     @Test
-    void shouldDeleteExistingRefreshTokenBeforeCreatingNewOne() {
+    void shouldNotDeleteExistingRefreshTokenOnNewLogin() {
         UserInfo user = UserInfo.builder().userId("1").username("john").build();
-        when(userRepository.findByUsername("john")).thenReturn(user);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.of(user));
         when(refreshTokenRepository.save(any())).thenAnswer(i -> i.getArgument(0));
         refreshTokenService.createRefreshToken("john");
-        verify(refreshTokenRepository).deleteByUserInfo(user);   // ← bulk delete, not per-token
-        verify(refreshTokenRepository).flush();
-        verify(refreshTokenRepository).save(any());
+
+        verify(refreshTokenRepository, never()).deleteByUserInfo(any());
     }
 
     @Test
     void shouldThrowExceptionWhenUserDoesNotExist() {
-        when(userRepository.findByUsername("john")).thenReturn(null);
+        when(userRepository.findByUsername("john")).thenReturn(Optional.empty());
         assertThrows(
                 UsernameNotFoundException.class,
                 () -> refreshTokenService.createRefreshToken("john")
@@ -141,7 +139,7 @@ class RefreshTokenServiceTest {
                 .build();
 
         when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+                .thenReturn(Optional.of(user));
 
         when(refreshTokenRepository.save(any()))
                 .thenAnswer(i -> i.getArgument(0));
@@ -167,7 +165,7 @@ class RefreshTokenServiceTest {
                 .build();
 
         when(userRepository.findByUsername("john"))
-                .thenReturn(user);
+                .thenReturn(Optional.of(user));
 
 
         when(refreshTokenRepository.save(any()))

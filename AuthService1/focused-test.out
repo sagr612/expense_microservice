@@ -1,0 +1,27 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.14/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Reusing configuration cache.
+> Task :app:processTestResources UP-TO-DATE
+> Task :app:processResources UP-TO-DATE
+> Task :app:compileJava UP-TO-DATE
+> Task :app:classes UP-TO-DATE
+> Task :app:compileTestJava UP-TO-DATE
+> Task :app:testClasses UP-TO-DATE
+
+> Task :app:test
+
+TokenControllerTest > shouldChangeUsernameSuccessfully() FAILED
+    java.lang.AssertionError at TokenControllerTest.java:310
+        Caused by: java.lang.IllegalArgumentException at TokenControllerTest.java:310
+
+> Task :app:test FAILED
+
+[Incubating] Problems report is available at: file:///C:/Users/greatest/Work-dev/backend/expenseTracker/AuthService1/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+5 actionable tasks: 1 executed, 4 up-to-date
+Configuration cache entry reused.

@@ -7,7 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import sagar.userService.dtos.UserDeletedEvent;
+import sagar.userService.dtos.event.UserDeletedEvent;
 import sagar.userService.entities.OutboxEvent;
 import sagar.userService.repository.OutboxRepository;
 
@@ -20,8 +20,8 @@ import java.time.Instant;
 public class OutboxEventPublisher {
     private static final int MAX_ATTEMPTS = 10;
     private static final Duration BASE_BACKOFF = Duration.ofSeconds(1);
-    private static final Duration MAX_BACKOFF  = Duration.ofMinutes(5);
-    private static final Duration SEND_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration MAX_BACKOFF = Duration.ofMinutes(5);
+    private static final Duration SEND_TIMEOUT = Duration.ofSeconds(3);
 
     private final KafkaTemplate<String, Object> kafkaTemplate;
     private final OutboxRepository outboxRepository;
@@ -41,6 +41,7 @@ public class OutboxEventPublisher {
             event.setStatus(OutboxEvent.OutboxStatus.PUBLISHED);
             event.setPublished(true);       // keep legacy flag in sync
             event.setLastError(null);
+            event.setLockedUntil(null);
             outboxRepository.save(event);
             log.debug("Outbox event {} published (attempt {})", event.getId(), event.getAttemptCount() + 1);
 
@@ -48,12 +49,13 @@ public class OutboxEventPublisher {
             int newCount = event.getAttemptCount() + 1;
             event.setAttemptCount(newCount);
             event.setLastError(truncate(ex.getMessage(), 1000));
-
+            event.setLockedUntil(null);
             if (newCount >= MAX_ATTEMPTS) {
                 event.setStatus(OutboxEvent.OutboxStatus.DEAD);
                 log.error("Outbox event {} moved to DEAD after {} attempts. Last error: {}",
                         event.getId(), newCount, ex.getMessage(), ex);
             } else {
+                event.setStatus(OutboxEvent.OutboxStatus.PENDING);
                 Instant next = Instant.now().plus(computeBackoff(newCount));
                 event.setNextRetryAt(next);
                 log.warn("Outbox event {} failed (attempt {}/{}); next retry at {}. Cause: {}",

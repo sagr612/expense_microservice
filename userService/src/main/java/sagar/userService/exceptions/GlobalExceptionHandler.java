@@ -71,6 +71,7 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .status(409)
                 .message(ex.getMessage())
+                .error("Conflict")
                 .timestamp(Instant.now().toString()) // STRING, not Instant
                 .build();
 

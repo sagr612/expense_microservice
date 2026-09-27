@@ -16,9 +16,8 @@ import sagar.userService.entities.UserInfo;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public class UserInfoDto {
 
-/** Stable idempotency key across producer retries. Populated by AuthService's outbox publisher. */
-@Size(max = 100, message = "Event ID must not exceed 100 characters")
-private String eventId;
+    @Size(max = 100, message = "Event ID must not exceed 100 characters")
+    private String eventId;
 
     @NotBlank(message = "User ID is required")
     @Size(max = 100, message = "User ID must not exceed 100 characters")
@@ -32,10 +31,9 @@ private String eventId;
     @Size(max = 100, message = "Last name must not exceed 100 characters")
     private String lastName;
 
-    @NotNull(message = "Phone number is required")
-    @Min(value = 1000000000L, message = "Phone number must be at least 10 digits")
-    @Max(value = 9999999999L, message = "Phone number must not exceed 10 digits")
-    private Long phoneNumber;
+    @NotBlank(message = "Phone number is required")
+    @Pattern(regexp = "^[+]?[0-9]{10,15}$", message = "Phone number must be valid (10 to 15 digits)")
+    private String phoneNumber;
 
     @NotBlank(message = "Email is required")
     @Email(message = "Email must be valid")

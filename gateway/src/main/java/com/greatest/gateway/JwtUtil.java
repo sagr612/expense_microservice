@@ -17,7 +17,7 @@ import java.util.Optional;
 
 @Slf4j
 @Component
-public class    JwtUtil {
+public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
     private SecretKey signKey;     // ← field to hold the cached key
@@ -32,11 +32,21 @@ public class    JwtUtil {
     public Optional<Claims> parseAndValidate(String token) {
         try {
             Claims claims = extractClaims(token);
-            if (claims.getExpiration().before(new Date())) {
+            if (claims.getExpiration() == null || claims.getExpiration().before(new Date())) {
+                return Optional.empty();
+            }
+
+            if (claims.getSubject() == null || claims.getSubject().isBlank()) {
+                return Optional.empty();
+            }
+
+            String userId = claims.get("userId", String.class);
+            if (userId == null || userId.isBlank()) {
                 return Optional.empty();
             }
             return Optional.of(claims);
         } catch (JwtException ex) {
+            log.warn("JWT validation failed: {}", ex.getMessage());
             return Optional.empty();
         }
     }

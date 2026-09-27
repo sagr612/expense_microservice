@@ -37,8 +37,16 @@ public class SecurityConfig {
                                 "/auth/v1/login",
                                 "/auth/v1/signup",
                                 "/auth/v1/refreshToken",
+                                "/auth/v1/forgot-password",
+                                "/auth/v1/reset-password",
                                 "/auth/v1/health",
-                                "/actuator/**"
+                                "/actuator/health",
+                                "/actuator/info",
+                                "/actuator/prometheus",
+                                "/v3/api-docs/**",
+                                "/swagger-ui/**",
+                                "/swagger-ui.html"
+
                         ).permitAll()
                         .requestMatchers("/auth/v1/admin/**").hasRole("ADMIN")   // ← defense in depth
                         .anyRequest().authenticated()

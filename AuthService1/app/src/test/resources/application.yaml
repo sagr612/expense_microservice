@@ -25,11 +25,16 @@ eureka:
     register-with-eureka: false
     fetch-registry: false
 
-#outbox:
-#  scheduler:
-#    enabled: false
+outbox:
+  scheduler:
+    enabled: false
 
 jwt:
   secret: dGVzdC1zZWNyZXQtMzItYnl0ZS1sb25nLWZvci1oczI1NiE=
   expiration: 3600000
   refresh-expiration: 604800000
+
+
+brevo:
+  api-key: test-brevo-key
+

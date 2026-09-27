@@ -10,7 +10,6 @@ import java.time.Instant;
 @Table(
         name = "outbox_events",
         indexes = {
-                // Poller hot-path: WHERE status='PENDING' AND next_retry_at <= now ORDER BY created_at
                 @Index(name = "idx_outbox_pending",
                         columnList = "status, next_retry_at, created_at")
         }
@@ -51,6 +50,8 @@ public class OutboxEvent {
     @Column(columnDefinition = "TEXT")
     private String lastError;
 
+    private Instant lockedUntil;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
@@ -58,6 +59,7 @@ public class OutboxEvent {
 
     public enum OutboxStatus {
         PENDING,   // waiting to be published (or being retried)
+        PROCESSING, // leased by worker pool
         PUBLISHED, // successfully sent to Kafka
         DEAD       // exceeded max attempts, needs manual review
     }

@@ -39,7 +39,7 @@ class AuthServiceConsumerTest {
         UserInfoDto event = UserInfoDto.builder()
                 .eventId("evt-123")
                 .userId("user-1").firstName("A").lastName("B")
-                .phoneNumber(9999999999L).email("a@b.com").build();
+                .phoneNumber("9999999999").email("a@b.com").build();
 
         when(processedEventRepository.existsById("evt-123")).thenReturn(false);
         when(userService.upsertFromEvent(event)).thenReturn(event);
@@ -68,21 +68,7 @@ class AuthServiceConsumerTest {
         verify(processedEventRepository, never()).save(any());
     }
 
-    @Test
-    void listen_swallowsDuplicateMarkerInsert_whenTwoConsumersRaceOnSameEvent() {
-        UserInfoDto event = UserInfoDto.builder()
-                .eventId("evt-123").userId("user-1").build();
 
-        when(processedEventRepository.existsById("evt-123")).thenReturn(false);
-        when(userService.upsertFromEvent(event)).thenReturn(event);
-        when(processedEventRepository.save(any(ProcessedEvent.class)))
-                .thenThrow(new DataIntegrityViolationException("duplicate key"));
-
-        // must NOT propagate — the business op is idempotent, so a lost race on the
-        // marker insert is harmless. The other consumer already won.
-        assertThatCode(() -> authServiceConsumer.listen(event))
-                .doesNotThrowAnyException();
-    }
 
     @Test
     void listen_fallsBackToAtLeastOnce_whenEventIdMissing() {

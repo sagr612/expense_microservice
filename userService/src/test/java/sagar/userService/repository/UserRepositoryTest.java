@@ -27,7 +27,7 @@ class UserRepositoryTest {
                 .userId("user-1")
                 .firstName("Alice")
                 .lastName("Smith")
-                .phoneNumber(1000000001L)
+                .phoneNumber("1000000001")
                 .email("alice@example.com")
                 .build();
         entityManager.persist(user);
@@ -52,7 +52,7 @@ class UserRepositoryTest {
                 .userId("user-2")
                 .firstName("Bob")
                 .lastName("Jones")
-                .phoneNumber(1000000002L)
+                .phoneNumber("1000000002")
                 .email("bob@example.com")
                 .build();
         entityManager.persist(user);
@@ -77,7 +77,7 @@ class UserRepositoryTest {
                 .userId("user-3")
                 .firstName("Carol")
                 .lastName("Davis")
-                .phoneNumber(1000000003L)
+                .phoneNumber("1000000003")
                 .email("carol@example.com")
                 .build();
         entityManager.persist(user);

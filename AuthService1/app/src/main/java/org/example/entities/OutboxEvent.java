@@ -31,7 +31,8 @@ public class OutboxEvent {
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) @Builder.Default
     private OutboxStatus status = OutboxStatus.PENDING;
 
-    public enum OutboxStatus { PENDING, PUBLISHED, DEAD }
+    public enum OutboxStatus { PENDING, PROCESSING, PUBLISHED, DEAD }
 
+    private Instant lockedUntil;
 }
 

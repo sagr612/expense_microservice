@@ -1,6 +1,8 @@
 package sagar.userService.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import sagar.userService.entities.OutboxEvent;
 import sagar.userService.entities.OutboxEvent.OutboxStatus;
@@ -11,13 +13,16 @@ import java.util.List;
 @Repository
 public interface OutboxRepository extends JpaRepository<OutboxEvent, String> {
 
-    /** Kept for the existing scheduled task before rename. Will be removed once callers migrate. */
-    List<OutboxEvent> findTop50ByPublishedFalseOrderByCreatedAtAsc();
 
-    /**
-     * Poller query: pick events that are PENDING and whose retry-cooldown has expired,
-     * oldest first, batched.
-     */
-    List<OutboxEvent> findTop50ByStatusAndNextRetryAtBeforeOrderByCreatedAtAsc(
-            OutboxStatus status, Instant now);
+    @Query(value = """
+            SELECT * FROM outbox_events
+            WHERE (status = 'PENDING' AND next_retry_at <= :now)
+               OR (status = 'PROCESSING' AND locked_until <= :now)
+            ORDER BY created_at ASC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+            """, nativeQuery = true)
+    List<OutboxEvent> findClaimableEvents(@Param("now") Instant now, @Param("limit") int limit);
+
+
 }

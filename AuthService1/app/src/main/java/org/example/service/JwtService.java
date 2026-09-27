@@ -45,7 +45,8 @@ public class JwtService {
     public String createToken(Map<String, Object> claims, String username) {
         return Jwts.builder()
                 .claims(claims)                     // was setClaims
-                .subject(username)                  // was setSubject
+                .subject(username)
+                .issuer("expense-tracker-auth")
                 .issuedAt(new Date())               // was setIssuedAt
                 .expiration(new Date(System.currentTimeMillis() + jwtExpiration))  // was setExpiration
                 .signWith(signKey, Jwts.SIG.HS256)  // was signWith(key, SignatureAlgorithm.HS256)
@@ -76,10 +77,7 @@ public class JwtService {
         return extractExpiration(token).before(new Date());
     }
 
-//    public Boolean validateToken(String token, UserDetails userDetails){
-//        final String username=extractUsername(token);
-//        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
-//    }
+
     public boolean validateToken(String token, UserDetails userDetails) {
         try {
             String username = extractUsername(token);

@@ -28,14 +28,7 @@ class UserRepositoryTest {
     @BeforeEach
     void setup() {
         userRepository.deleteAll();
-        user = UserInfo.builder()
-                .userId("user-1")
-                .username("john")
-                .password("password")
-                .roles(Set.of(UserRole.ROLE_USER))
-                .phoneNumber("9999999999")
-                .email("john@test.com")
-                .build();
+        user = UserInfo.builder().userId("user-1").username("john").password("password").roles(Set.of(UserRole.ROLE_USER)).phoneNumber("9999999999").email("john@test.com").build();
         userRepository.save(user);
     }
 
@@ -46,7 +39,7 @@ class UserRepositoryTest {
     @Test
     void shouldFindUserByUsername() {
 
-        UserInfo result = userRepository.findByUsername("john");
+        UserInfo result = userRepository.findByUsername("john").orElse(null);
 
         assertNotNull(result);
         assertEquals("john", result.getUsername());
@@ -56,7 +49,7 @@ class UserRepositoryTest {
     @Test
     void shouldReturnNullWhenUsernameDoesNotExist() {
 
-        UserInfo result = userRepository.findByUsername("abc");
+        UserInfo result = userRepository.findByUsername("abc").orElse(null);
         assertNull(result);
     }
 
@@ -114,7 +107,7 @@ class UserRepositoryTest {
     void shouldDeleteUserByUserId() {
         userRepository.deleteByUserId("user-1");
         assertFalse(userRepository.existsByUsername("john"));
-        assertNull(userRepository.findByUsername("john"));
+        assert(userRepository.findByUsername("john")).isEmpty();
     }
 
     @Test

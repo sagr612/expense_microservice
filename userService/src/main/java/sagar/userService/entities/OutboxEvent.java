@@ -34,20 +34,16 @@ public class OutboxEvent {
     @CreationTimestamp
     private Instant createdAt;
 
-    /** Retained for backward compatibility with existing rows / dashboards. */
     private boolean published;
 
-    /** Number of publish attempts made so far. */
     @Column(nullable = false)
     @Builder.Default
     private int attemptCount = 0;
 
-    /** Earliest time this event is eligible to be published again. */
     @Column(nullable = false)
     @Builder.Default
     private Instant nextRetryAt = Instant.now();
 
-    /** Last exception message, for observability. */
     @Column(columnDefinition = "TEXT")
     private String lastError;
 
@@ -57,8 +53,11 @@ public class OutboxEvent {
     private OutboxStatus status = OutboxStatus.PENDING;
 
     public enum OutboxStatus {
-        PENDING,   // waiting to be published (or being retried)
-        PUBLISHED, // successfully sent to Kafka
-        DEAD       // exceeded max attempts, needs manual review
+        PENDING,
+        PROCESSING,
+        PUBLISHED,
+        DEAD
     }
+
+    private Instant lockedUntil;
 }

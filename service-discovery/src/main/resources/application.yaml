@@ -6,6 +6,27 @@ server:
   port: 8761
 
 eureka:
+  instance:
+    hostname: service-discovery
   client:
     register-with-eureka: false
     fetch-registry: false
+    service-url:
+      defaultZone: http://${eureka.instance.hostname}:${server.port}/eureka/
+  server:
+    # Standalone mode: don't wait for peers to sync on startup
+    wait-time-in-ms-when-sync-empty: 0
+    # Dev mode: disable self-preservation so dead instances are evicted quickly
+    enable-self-preservation: false
+    eviction-interval-timer-in-ms: 5000
+    # Cache updates: reduce cache delay from 30s to 3s for fast discovery
+    response-cache-update-interval-ms: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always

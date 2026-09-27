@@ -36,6 +36,9 @@ spring:
       name: user.deleted
     topic-expense-created:
       name: expense.created
+    topic-expense-create-request:
+      name: expense.create.request
+
     consumer:
       group-id: expenseService-group
       auto-offset-reset: earliest
@@ -54,11 +57,11 @@ server:
 
 logging:
   level:
-    com.greatest.expenseService: DEBUG
+    com.greatest.expenseService: INFO
     org.springframework.web: INFO
-    org.hibernate.SQL: DEBUG
+    org.hibernate.SQL: INFO
     org.springframework.kafka: INFO
-    io.micrometer.tracing: DEBUG
+    io.micrometer.tracing: INFO
 
 
 
@@ -80,21 +83,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: "*"
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
   metrics:
     export:
       prometheus:
         enabled: true
     tags:
       application: ${spring.application.name}
-
-  endpoint:
-    health:
-      show-details: always
   tracing:
     enabled: true
     sampling:
-      probability: 1.0
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
     metrics:
       export:
         enabled: false

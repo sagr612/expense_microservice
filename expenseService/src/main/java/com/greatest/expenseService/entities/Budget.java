@@ -6,18 +6,7 @@ import lombok.*;
 import java.math.BigDecimal;
 
 @Entity
-@Table(
-        uniqueConstraints = {
-                @UniqueConstraint(
-                        columnNames = {
-                                "userId",
-                                "category",
-                                "budget_month",
-                                "budget_year"
-                        }
-                )
-        }
-)
+@Table(name = "budget", uniqueConstraints = {@UniqueConstraint(columnNames = {"userId", "category", "budget_month", "budget_year"})})
 @Getter
 @Setter
 @Builder

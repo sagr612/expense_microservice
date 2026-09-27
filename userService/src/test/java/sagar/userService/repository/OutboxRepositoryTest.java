@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
 import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.TestPropertySource;
 import sagar.userService.entities.OutboxEvent;
 
 import java.time.Instant;
@@ -13,9 +12,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Uses the default embedded/test DB config for @DataJpaTest (H2 by default unless you've
-// excluded it) — no Testcontainers needed here since we're only exercising the query method,
-// not anything Postgres-specific.
+
 @DataJpaTest
 @ActiveProfiles("test")
 //@TestPropertySource(properties = "spring.flyway.enabled=false") // disable flyway migration
@@ -33,6 +30,7 @@ class OutboxRepositoryTest {
                 .aggregateId("user-1")
                 .eventType("USER_DELETED")
                 .payload("{}")
+                .status(OutboxEvent.OutboxStatus.PUBLISHED)
                 .published(true)
                 .build();
 
@@ -56,7 +54,7 @@ class OutboxRepositoryTest {
         entityManager.persist(newer);
         entityManager.flush();
 
-        List<OutboxEvent> result = outboxRepository.findTop50ByPublishedFalseOrderByCreatedAtAsc();
+        List<OutboxEvent> result = outboxRepository.findClaimableEvents(Instant.now(), 10);
 
         assertThat(result).hasSize(2);
         assertThat(result).extracting(OutboxEvent::getAggregateId)
@@ -70,13 +68,14 @@ class OutboxRepositoryTest {
                 .aggregateId("user-1")
                 .eventType("USER_DELETED")
                 .payload("{}")
+                .status(OutboxEvent.OutboxStatus.PUBLISHED)
                 .published(true)
                 .build();
 
         entityManager.persist(published);
         entityManager.flush();
+        List<OutboxEvent> result = outboxRepository.findClaimableEvents(Instant.now(), 10);
 
-        List<OutboxEvent> result = outboxRepository.findTop50ByPublishedFalseOrderByCreatedAtAsc();
 
         assertThat(result).isEmpty();
     }
@@ -116,9 +115,7 @@ class OutboxRepositoryTest {
         entityManager.persist(dead);
         entityManager.flush();
 
-        List<OutboxEvent> result = outboxRepository
-                .findTop50ByStatusAndNextRetryAtBeforeOrderByCreatedAtAsc(
-                        OutboxEvent.OutboxStatus.PENDING, now);
+        List<OutboxEvent> result = outboxRepository.findClaimableEvents(Instant.now(), 10);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getAggregateId()).isEqualTo("user-1");
