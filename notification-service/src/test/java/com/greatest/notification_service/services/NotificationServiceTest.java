@@ -3,6 +3,7 @@ package com.greatest.notification_service.services;
 import com.greatest.notification_service.dtos.NotificationDto;
 import com.greatest.notification_service.entities.Notification;
 import com.greatest.notification_service.entities.NotificationType;
+import com.greatest.notification_service.exceptions.NotificationNotFoundException;
 import com.greatest.notification_service.repositories.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -12,6 +13,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 
 import java.time.Instant;
@@ -29,6 +34,9 @@ class NotificationServiceTest {
 
     @Mock
     private NotificationRepository repository;
+
+    @Mock
+    private ApplicationEventPublisher publisher;
 
     @InjectMocks
     private NotificationService notificationService;
@@ -81,13 +89,14 @@ class NotificationServiceTest {
 
         @Test
         void returnsMappedDtos_orderedAsRepositoryReturnsThem() {
-            when(repository.findByUserIdOrderByCreatedAtDesc("user-1"))
-                    .thenReturn(List.of(notification));
+            Page<Notification> page = new PageImpl<>(List.of(notification));
+            when(repository.findByUserIdOrderByCreatedAtDesc(eq("user-1"), any(Pageable.class)))
+                    .thenReturn(page);
 
-            List<NotificationDto> result = notificationService.getNotifications("user-1");
+            Page<NotificationDto> result = notificationService.getNotifications("user-1", 0, 20);
 
             assertThat(result).hasSize(1);
-            NotificationDto dto = result.get(0);
+            NotificationDto dto = result.getContent().get(0);
             assertThat(dto.getId()).isEqualTo("notif-1");
             assertThat(dto.getTitle()).isEqualTo("Budget Alert");
             assertThat(dto.getType()).isEqualTo("BUDGET_ALERT");
@@ -96,10 +105,11 @@ class NotificationServiceTest {
 
         @Test
         void returnsEmptyList_whenUserHasNoNotifications() {
-            when(repository.findByUserIdOrderByCreatedAtDesc("user-2"))
-                    .thenReturn(List.of());
+            Page<Notification> page = new PageImpl<>(List.of());
+            when(repository.findByUserIdOrderByCreatedAtDesc(eq("user-2"),  any(Pageable.class)))
+                    .thenReturn(page);
 
-            List<NotificationDto> result = notificationService.getNotifications("user-2");
+            Page<NotificationDto> result = notificationService.getNotifications("user-2", 0, 20);
 
             assertThat(result).isEmpty();
         }
@@ -143,11 +153,11 @@ class NotificationServiceTest {
         }
 
         @Test
-        void throwsIllegalArgument_whenNotificationNotFound() {
+        void throwsNotFound_whenNotificationNotFound() {
             when(repository.findById("missing")).thenReturn(Optional.empty());
 
             assertThatThrownBy(() -> notificationService.markRead("missing", "user-1"))
-                    .isInstanceOf(IllegalArgumentException.class)
+                    .isInstanceOf(NotificationNotFoundException.class)
                     .hasMessageContaining("Notification not found");
         }
     }

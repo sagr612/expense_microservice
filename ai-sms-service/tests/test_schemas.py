@@ -1,5 +1,3 @@
-# tests/test_schemas.py
-"""Unit tests for Pydantic request/response schemas."""
 import pytest
 from pydantic import ValidationError
 
@@ -21,8 +19,14 @@ def test_sms_classify_request_missing_field():
 
 
 def test_sms_classify_request_empty_string():
-    req = SmsClassifyRequest(smsText="")
-    assert req.smsText == ""
+    with pytest.raises(ValidationError):
+        SmsClassifyRequest(smsText="")
+
+
+def test_sms_classify_request_exceeds_max_length():
+    with pytest.raises(ValidationError):
+        SmsClassifyRequest(smsText="a" * 2001)
+
 
 
 def test_sms_classify_request_wrong_type():

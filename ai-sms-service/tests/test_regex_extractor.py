@@ -1,9 +1,3 @@
-"""
-Tests for app.extractors.regex_extractor.
-
-Pure functions, no mocking needed — these directly exercise the regex
-patterns against representative SMS text.
-"""
 import pytest
 
 from app.extractors.regex_extractor import extract_amount, extract_merchant, guess_category
@@ -29,6 +23,13 @@ class TestExtractAmount:
     def test_returns_none_on_empty_string(self):
         assert extract_amount("") is None
 
+    def test_extract_amount_ignores_balance_when_transaction_present(self):
+        text = "Available balance Rs.12,000. Rs.500 debited"
+        assert extract_amount(text) == 500.0
+
+    def test_extract_amount_ignores_pure_balance_inquiry(self):
+        text = "Your available balance is Rs.12,000"
+        assert extract_amount(text) is None
 
 class TestExtractMerchant:
     def test_extracts_merchant_from_vpa_format(self):
@@ -52,8 +53,16 @@ class TestExtractMerchant:
         assert extract_merchant("Your account balance is low") is None
 
     def test_lowercase_merchant_name_does_not_match_at_to_from_pattern(self):
-        # MERCHANT_PATTERN requires the merchant to start with an uppercase letter.
         assert extract_merchant("debited at starbucks today") is None
+
+    def test_extracts_merchant_over_bank_name(self):
+        text = "Rs.500 debited from HDFC Bank at Starbucks"
+        assert extract_merchant(text) == "Starbucks"
+
+    def test_extracts_merchant_without_trailing_period(self):
+        text = "Rs.500 debited at Starbucks"
+        assert extract_merchant(text) == "Starbucks"
+
 
 
 class TestGuessCategory:
@@ -98,9 +107,6 @@ class TestGuessCategoryIncomeCategories:
 
 
 class TestGuessCategoryWordBoundary:
-    """The new implementation uses \\b word boundaries — verify it prevents
-    false positives from substring matches."""
-
     def test_ola_does_not_match_chocolate(self):
         assert guess_category("Bought chocolate at store") != "TRANSPORT"
 

@@ -1,11 +1,17 @@
 package com.greatest.notification_service.services;
 
+import com.greatest.notification_service.dtos.NotificationCreatedEvent;
 import com.greatest.notification_service.dtos.NotificationDto;
 import com.greatest.notification_service.entities.Notification;
 import com.greatest.notification_service.entities.NotificationType;
+import com.greatest.notification_service.exceptions.NotificationNotFoundException;
 import com.greatest.notification_service.repositories.NotificationRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,11 +25,12 @@ import java.util.Objects;
 public class NotificationService {
 
     private final NotificationRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Notification create(String userId, String title, String body, NotificationType type) {
         Objects.requireNonNull(userId, "userId must not be null");
 
-        log.info("Expense created for  userId: {}", userId);
+        log.info("Notification created for  userId: {}", userId);
         Notification notification = Notification.builder()
                 .userId(userId)
                 .title(title)
@@ -32,17 +39,18 @@ public class NotificationService {
                 .isRead(false)
                 .build();
 
-        return repository.save(notification);
+        Notification saved = repository.save(notification);
+        eventPublisher.publishEvent(new NotificationCreatedEvent(saved.getId(), userId, title, body, type));
+        return saved;
     }
 
-    public List<NotificationDto> getNotifications(String userId) {
+    public Page<NotificationDto> getNotifications(String userId, int page, int size) {
         Objects.requireNonNull(userId, "userId must not be null");
-
+        int safeSize= Math.clamp(size, 1, 50);
+        int safePage= Math.max(0, page);
         return repository
-                .findByUserIdOrderByCreatedAtDesc(userId)
-                .stream()
-                .map(this::toDto)
-                .toList();
+                .findByUserIdOrderByCreatedAtDesc(userId, PageRequest.of(safePage, safeSize))
+                .map(this::toDto);
     }
 
     public Long unreadCount(String userId) {
@@ -56,7 +64,7 @@ public class NotificationService {
         Objects.requireNonNull(userId, "userId must not be null");
 
         Notification notification = repository.findById(notificationId)
-                .orElseThrow(() -> new IllegalArgumentException("Notification not found"));
+                .orElseThrow(() -> new NotificationNotFoundException("Notification not found"));
         if (!notification.getUserId().equals(userId)) {
             throw new AccessDeniedException("Not your notification");
         }

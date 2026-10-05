@@ -45,12 +45,19 @@ class BudgetServiceTest {
                     .month(6)
                     .year(2026)
                     .build();
+            Budget newBudget = Budget.builder()
+                    .id(1L).userId("user-1").category(CategoryType.FOOD)
+                    .month(6).year(2026).amount(BigDecimal.valueOf(5000))
+                    .build();
 
             when(budgetRepository.findByUserIdAndCategoryAndMonthAndYear(
                     "user-1", CategoryType.FOOD, 6, 2026))
                     .thenReturn(Optional.empty());
 
+            when(budgetRepository.save(any())).thenReturn(newBudget);
+
             BudgetDto result = budgetService.createBudget("user-1", dto);
+
 
             assertThat(result.getAmount()).isEqualTo(BigDecimal.valueOf(5000));
 
@@ -80,6 +87,7 @@ class BudgetServiceTest {
                     "user-1", CategoryType.FOOD, 6, 2026))
                     .thenReturn(Optional.of(existing));
 
+            when(budgetRepository.save(any())).thenReturn(existing);
             budgetService.createBudget("user-1", dto);
 
             ArgumentCaptor<Budget> captor = ArgumentCaptor.forClass(Budget.class);

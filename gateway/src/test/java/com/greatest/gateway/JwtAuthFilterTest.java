@@ -44,6 +44,7 @@ class JwtAuthFilterTest {
     private String createToken(String username, String userId, List<String> roles, long ttl) {
         return Jwts.builder()
                 .subject(username)
+                .issuer("expense-tracker-auth")
                 .claims(Map.of("userId", userId, "roles", roles))
                 .expiration(new Date(System.currentTimeMillis() + ttl))
                 .signWith(key)

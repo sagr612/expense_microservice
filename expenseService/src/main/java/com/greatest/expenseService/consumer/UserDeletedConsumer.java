@@ -15,7 +15,7 @@ public class UserDeletedConsumer {
     private final UserCleanupService userCleanupService;
 
     @KafkaListener(
-            topics = "user.deleted",
+            topics = "${spring.kafka.topic-user-deleted.name:user.deleted}",
             groupId = "expenseService-group",
             containerFactory = "userDeletedKafkaListenerContainerFactory"
     )

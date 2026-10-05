@@ -21,6 +21,7 @@ public class BudgetService {
 
     private final BudgetRepository budgetRepository;
     private final ExpenseRepository expenseRepository;
+
     @Transactional
     public BudgetDto createBudget(String userId, @Valid  BudgetDto dto) {
         if (userId == null || userId.isBlank()) {
@@ -52,9 +53,14 @@ public class BudgetService {
 
         budget.setAmount(dto.getAmount());
 
-        budgetRepository.save(budget);
+      Budget saved=  budgetRepository.save(budget);
 
-        return dto;
+        return BudgetDto.builder()
+                .category(saved.getCategory())
+                .amount(saved.getAmount())
+                .month(saved.getMonth())
+                .year(saved.getYear())
+                .build();
     }
 
     public List<BudgetStatusDto> getBudgetStatus(String userId, Integer month, Integer year) {

@@ -95,7 +95,7 @@ public class GlobalExceptionHandler {
         ErrorResponse error = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .status(HttpStatus.CONFLICT.value())
-                .error("Internal Server Error")
+                .error("Conflict")
                 .message("Expense was modified by another transaction")
                 .build();
 

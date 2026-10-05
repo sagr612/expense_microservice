@@ -2,13 +2,31 @@
 import re
 
 VPA_PATTERN = re.compile(r"VPA\s+([a-zA-Z0-9.\-_]+)@", re.IGNORECASE)
-MERCHANT_PATTERN = re.compile(r"\b(?:at|to|from)\s+([A-Z][A-Za-z0-9&\s]{2,30}?)(?:[.,]|\son|\svia|\bRef)", re.IGNORECASE)
+
+MERCHANT_AT_TO_PATTERN = re.compile(
+    r"(?i:\b(?:at|to)\s+)([A-Z][A-Za-z0-9&\s]{1,30}?)(?=[.,\n]|\son\b|\svia\b|\bfor\b|\bRef\b|$)"
+)
+MERCHANT_FROM_PATTERN = re.compile(
+    r"(?i:\b(?:from)\s+)([A-Z][A-Za-z0-9&\s]{1,30}?)(?=[.,\n]|\son\b|\svia\b|\bfor\b|\bRef\b|$)"
+)
+
+# MERCHANT_PATTERN = re.compile(r"\b(?:at|to|from)\s+([A-Z][A-Za-z0-9&\s]{2,30}?)(?:[.,]|\son|\svia|\bRef)", re.IGNORECASE)
+
+# AMOUNT_PATTERN = re.compile(
+#     r"(?:debited|credited|spent|paid|received|transferred)?\s*(?:by|of)?\s*"
+#     r"(?:Rs\.?|INR|₹)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?!\d)",
+#     re.IGNORECASE,
+# )
 
 AMOUNT_PATTERN = re.compile(
-    r"(?:debited|credited|spent|paid|received|transferred)?\s*(?:by|of)?\s*"
     r"(?:Rs\.?|INR|₹)\s*(\d{1,3}(?:,\d{2,3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)(?!\d)",
     re.IGNORECASE,
 )
+TRANSACTION_VERB = re.compile(
+    r"\b(?:debited|credited|spent|paid|received|transferred|withdrawn|purchased)\b",
+    re.IGNORECASE,
+)
+BALANCE_CONTEXT = re.compile(r"\b(?:balance|bal|avl|available)\b", re.IGNORECASE)
 
 CATEGORY_KEYWORDS = {
     # ---------- EXPENSE CATEGORIES ----------
@@ -81,18 +99,36 @@ CATEGORY_KEYWORDS = {
 
 
 def extract_amount(text: str):
-    match = AMOUNT_PATTERN.search(text)
-    return float(match.group(1).replace(",", "")) if match else None
+    matches = list(AMOUNT_PATTERN.finditer(text))
+    valid_amounts = []
+    for match in matches:
+        preceding = re.split(r"[.,\n;]", text[:match.start()])[-1]
+        following = re.split(r"[.,\n;]", text[:match.end()])[0]
+        has_verb = bool(TRANSACTION_VERB.search(preceding) or TRANSACTION_VERB.search(following))
+        is_balance = bool(BALANCE_CONTEXT.search(preceding) and not has_verb)
+
+        if is_balance:
+            continue
+        amount = float(match.group(1).replace(",", ""))
+        if has_verb:
+            return amount
+        valid_amounts.append(amount)
+    return valid_amounts[0] if valid_amounts else None
+
 
 def extract_merchant(text: str):
-    # Try VPA format first — "VPA swiggy@ybl" → "swiggy"
     vpa_match = VPA_PATTERN.search(text)
     if vpa_match:
         return vpa_match.group(1).strip()
+    at_to_match = MERCHANT_AT_TO_PATTERN.search(text)
+    if at_to_match:
+        return at_to_match.group(1).strip()
 
-    # Fall back to "at/to/from MERCHANT" format
-    match = MERCHANT_PATTERN.search(text)
-    return match.group(1).strip() if match else None
+    from_match = MERCHANT_FROM_PATTERN.search(text)
+    if from_match:
+        return from_match.group(1).strip()
+    return None
+
 
 def guess_category(text: str):
     lowered = text.lower()

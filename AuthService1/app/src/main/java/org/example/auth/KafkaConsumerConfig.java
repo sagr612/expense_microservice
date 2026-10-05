@@ -29,7 +29,9 @@ public class KafkaConsumerConfig {
 
     @Bean
     public DefaultErrorHandler userDeletedErrorHandler(KafkaTemplate<String, Object> kafkaTemplate) {
-        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(kafkaTemplate, (record, ex) -> new TopicPartition(record.topic() + ".DLT", record.partition()));
+        DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer
+                (kafkaTemplate, (record, ex)
+                        -> new TopicPartition(record.topic() + ".DLT", -1));
 
         DefaultErrorHandler errorHandler = new DefaultErrorHandler(recoverer, new FixedBackOff(1000L, 3));
         errorHandler.addNotRetryableExceptions(IllegalArgumentException.class);

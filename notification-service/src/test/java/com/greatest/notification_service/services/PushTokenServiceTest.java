@@ -11,6 +11,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -77,19 +79,35 @@ class PushTokenServiceTest {
                     .build();
 
             when(pushTokenRepository.findByUserId("user-1")).thenReturn(Optional.of(token));
+            Map<String, Object> data = new HashMap<>();
+            pushTokenService.sendToUser("user-1", "Title", "Body", data);
 
-            pushTokenService.sendToUser("user-1", "Title", "Body");
-
-            verify(expoPushService).sendPushNotification("ExponentPushToken[abc]", "Title", "Body");
+            verify(expoPushService).sendPushNotification("ExponentPushToken[abc]", "Title", "Body", data);
         }
 
         @Test
         void doesNothing_whenNoTokenRegisteredForUser() {
             when(pushTokenRepository.findByUserId("user-1")).thenReturn(Optional.empty());
 
-            pushTokenService.sendToUser("user-1", "Title", "Body");
+            pushTokenService.sendToUser("user-1", "Title", "Body", any());
 
             verifyNoInteractions(expoPushService);
+        }
+    }
+
+
+    @Nested
+    class DeleteToken {
+        @Test
+        void deletesTokenForUser() {
+            pushTokenService.deleteToken("user-1");
+            verify(pushTokenRepository).deleteByUserId("user-1");
+        }
+
+        @Test
+        void doesNothing_whenUserIdIsNull() {
+            pushTokenService.deleteToken(null);
+            verify(pushTokenRepository, never()).deleteByUserId(any());
         }
     }
 
@@ -98,10 +116,12 @@ class PushTokenServiceTest {
         PushToken token = PushToken.builder().userId("user-1").expoToken("garbage-not-a-real-token").build();
         when(pushTokenRepository.findByUserId("user-1")).thenReturn(Optional.of(token));
 
-        pushTokenService.sendToUser("user-1", "Title", "Body");
+        Map<String, Object> data = new HashMap<>();
+
+        pushTokenService.sendToUser("user-1", "Title", "Body", data);
 
         // PushTokenService's job is just to look up + delegate; validation is ExpoPushService's problem.
-        verify(expoPushService).sendPushNotification("garbage-not-a-real-token", "Title", "Body");
+        verify(expoPushService).sendPushNotification("garbage-not-a-real-token", "Title", "Body", data);
     }
 
 }

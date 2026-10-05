@@ -1,13 +1,20 @@
 import os
 import socket
+from typing import override
+
 import py_eureka_client.eureka_client as eureka_client
 
 
 def get_local_ip():
+    override = os.getenv("EUREKA_INSTANCE_HOST")
+    if override:
+        return override
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(("8.8.8.8", 80))
         return s.getsockname()[0]
+    except OSError:
+        return socket.gethostbyname(socket.gethostname())
     finally:
         s.close()
 

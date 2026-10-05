@@ -1,20 +1,17 @@
-# app/main.py
 import asyncio
 import hashlib
 import os
 from datetime import date
-# pyrefly: ignore [missing-import]
 from fastapi import FastAPI, Depends
 from dotenv import load_dotenv
-from opentelemetry import trace
 from prometheus_fastapi_instrumentator import Instrumentator
 
 load_dotenv()
 
 from app.auth import get_current_user_id
-from app.classifier.gemini_classifier import classify_sms, async_classify_sms
+from app.classifier.gemini_classifier import async_classify_sms
 from app.extractors.regex_extractor import extract_amount, extract_merchant, guess_category
-from app.kafka_client.producer import publish_expense_event, check_kafka_health, _get_producer
+from app.kafka_client.producer import publish_expense_event, check_kafka_health, close_producer
 from app.models.schemas import SmsClassifyRequest, SmsClassifyResponse, SmsExpenseEvent
 
 from contextlib import asynccontextmanager
@@ -33,18 +30,17 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── STARTUP ──────────────────────────────────────────────────────────
-    await register_with_eureka()
+    try:
+        await register_with_eureka()
+    except Exception as e:
+        logger.warning("Eureka registration failed; continuing without it: %s", e)
 
     yield  # app is running and serving requests here
 
     # ── SHUTDOWN (runs on SIGTERM / uvicorn stop) ─────────────────────────
     # 1. Flush and close the Kafka producer so no in-flight batches are lost.
     try:
-        producer = _get_producer()
-        producer.flush(timeout=10)   # wait up to 10s for pending sends to confirm
-        producer.close(timeout=5)
-        logger.info("Kafka producer closed gracefully")
+        close_producer()
     except Exception as e:
         logger.warning("Error closing Kafka producer: %s", e)
 
@@ -73,25 +69,28 @@ CONFIDENCE_THRESHOLD = 0.85
 
 @app.post("/api/v1/sms/classify", response_model=SmsClassifyResponse)
 async def classify(payload: SmsClassifyRequest, x_user_id: str = Depends(get_current_user_id)):
+    cleaned_text = payload.smsText.strip()
     # Async Gemini call — event loop is free to serve other requests while waiting
-    result = await async_classify_sms(payload.smsText)
+    result = await async_classify_sms(cleaned_text)
     label, confidence = result["label"], result["confidence"]
+    is_degraded = result.get("error") is not None
 
     if label == "irrelevant":
-        return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False)
+        return SmsClassifyResponse(
+            label=label, confidence=confidence, autoCreated=False, degraded=is_degraded)
 
-    amount = extract_amount(payload.smsText)
+    amount = extract_amount(cleaned_text)
     if amount is None:
-        return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False)
+        return SmsClassifyResponse(label=label, confidence=confidence, autoCreated=False, degraded=is_degraded)
 
-    merchant = extract_merchant(payload.smsText)
+    merchant = extract_merchant(cleaned_text)
     llm_category = result.get("category")
     if llm_category and llm_category != "OTHERS":
         category = llm_category
     else:
-        category = guess_category(payload.smsText)
+        category = guess_category(cleaned_text)
     external_id = "sms-" + hashlib.sha256(
-        (x_user_id + payload.smsText).encode()
+        (x_user_id + cleaned_text).encode()
     ).hexdigest()[:16]
 
     event = SmsExpenseEvent(
@@ -138,9 +137,8 @@ async def classify(payload: SmsClassifyRequest, x_user_id: str = Depends(get_cur
     )
 
     return SmsClassifyResponse(
-        label=label, confidence=confidence, autoCreated=auto_created, event=event,
+        label=label, confidence=confidence, autoCreated=auto_created, event=event, degraded=is_degraded
     )
-
 
 
 @app.exception_handler(Exception)
@@ -157,8 +155,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 
-
-
+@app.get("/actuator/health/readiness")
 @app.get("/actuator/health")
 def health():
     checks = {}
@@ -189,3 +186,9 @@ def health():
         status_code=status_code,
         content={"status": overall, "components": checks},
     )
+
+
+@app.get("/actuator/health/liveness")
+def liveness():
+    """Process liveness probe — returns 200 immediately without touching dependencies."""
+    return {"status": "UP"}

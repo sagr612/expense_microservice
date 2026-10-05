@@ -9,13 +9,16 @@ import sagar.userService.dtos.UserInfoDto;
 import java.util.Map;
 
 @Slf4j
-public class UserInfoDeserializer  implements Deserializer<UserInfoDto> {
+public class UserInfoDeserializer implements Deserializer<UserInfoDto> {
 
-    private static final ObjectMapper MAPPER=new ObjectMapper();
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
-    @Override public void close() {
+    @Override
+    public void close() {
     }
-    @Override public void configure(Map<String, ?> arg0, boolean arg1) {
+
+    @Override
+    public void configure(Map<String, ?> arg0, boolean arg1) {
     }
 
     @Override
@@ -28,9 +31,11 @@ public class UserInfoDeserializer  implements Deserializer<UserInfoDto> {
             UserInfoDto user = MAPPER.readValue(data, UserInfoDto.class);
             log.debug("Successfully deserialized UserInfoDto from topic: {}", topic);
             return user;
-        } catch (Exception ex) {
+        }  catch (Exception ex) {
             log.error("Failed to deserialize UserInfoDto from topic: {}", topic, ex);
-            throw new RuntimeException("Deserialization failed for topic: " + topic, ex);
+            throw new org.springframework.kafka.support.serializer.DeserializationException(
+                    "Deserialization failed for topic: " + topic, data, false, ex);
         }
+
     }
 }

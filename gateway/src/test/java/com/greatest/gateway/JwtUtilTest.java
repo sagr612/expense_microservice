@@ -34,6 +34,7 @@ public class JwtUtilTest {
     void shouldAcceptValidTokenWithRequiredClaims() {
         String token = Jwts.builder()
                 .subject("john")
+                .issuer("expense-tracker-auth")
                 .claim("userId", "user-123")
                 .expiration(new Date(System.currentTimeMillis() + 3600000))
                 .signWith(key)
@@ -50,6 +51,7 @@ public class JwtUtilTest {
     void shouldRejectExpiredToken() {
         String token = Jwts.builder()
                 .subject("john")
+                .issuer("expense-tracker-auth")
                 .claim("userId", "user-123")
                 .expiration(new Date(System.currentTimeMillis() - 3600000))
                 .signWith(key)
@@ -64,6 +66,7 @@ public class JwtUtilTest {
     void shouldRejectTokenMissingUserId() {
         String token = Jwts.builder()
                 .subject("john")
+                .issuer("expense-tracker-auth")
 //                .claims(Map.of("userId", "user-123"))
                 .expiration(new Date(System.currentTimeMillis() + 3600000))
                 .signWith(key)
@@ -76,6 +79,7 @@ public class JwtUtilTest {
     @Test
     void shouldRejectTokenMissingSubject() {
         String token = Jwts.builder()
+                .issuer("expense-tracker-auth")
 //                .subject("john")
                 .claims(Map.of("userId", "user-123"))
                 .expiration(new Date(System.currentTimeMillis() + 3600000))

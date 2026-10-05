@@ -12,6 +12,8 @@ import sagar.userService.entities.ProcessedEvent;
 import sagar.userService.repository.ProcessedEventRepository;
 import sagar.userService.services.UserService;
 
+import java.time.Instant;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -23,6 +25,7 @@ public class AuthServiceConsumer {
     @Value("${spring.kafka.consumer.group-id}")
     private String consumerGroup;
 
+    @Transactional
     @KafkaListener(topics = "${spring.kafka.topic-json.name}", groupId = "${spring.kafka.consumer.group-id}")
     public void listen(UserInfoDto eventData) {
         String eventId = eventData.getEventId();
@@ -33,13 +36,13 @@ public class AuthServiceConsumer {
             return;
         }
 
-        if (processedEventRepository.existsById(eventId)) {
-            log.debug("Skipping already-processed event {}", eventId);
+        int claimed = processedEventRepository.insertIfAbsent(eventId, consumerGroup, Instant.now());
+        if (claimed == 0) {
+            log.debug("Skipping already-processed budget alert event {}", eventId);
             return;
         }
         userService.upsertFromEvent(eventData);
 
-        processedEventRepository.save(ProcessedEvent.builder().eventId(eventId).consumerGroup(consumerGroup).build());
         log.info("Processed event {} for userId {}", eventId, eventData.getUserId());
 
     }

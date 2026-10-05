@@ -18,11 +18,12 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
+
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class NotificationEventConsumer {
-    private final PushTokenService pushTokenService;
     private final NotificationService notificationService;
     private final ProcessedEventRepository processedEventRepository;
 
@@ -30,79 +31,57 @@ public class NotificationEventConsumer {
     private String consumerGroup;
 
     @Transactional
-    @KafkaListener(topics = "budget-alerts", groupId = "${spring.kafka.consumer.group-id}", containerFactory = "budgetAlertKafkaListenerContainerFactory")
+    @KafkaListener(
+            topics = "${spring.kafka.topic-budget-alert.name:budget-alerts}",
+            groupId = "${spring.kafka.consumer.group-id:notification-service-group}",
+            containerFactory = "budgetAlertKafkaListenerContainerFactory")
     public void handleBudgetAlert(BudgetAlertEvent event) {
+        if (event == null || event.getUserId() == null || event.getEventId() == null) {
+            log.warn("Skipping invalid budget alert event: payload, userId, or eventId is null");
+            return;
+        }
         String eventId = event.getEventId();
         log.info("Budget alert received for userId: {}", event.getUserId());
-        if (eventId == null) {
-            log.warn("Event without eventId for user with userId={}", event.getUserId());
+
+        int claimed = processedEventRepository.insertIfAbsent(eventId, consumerGroup, Instant.now());
+
+        if (claimed == 0) {
+            log.debug("Skipping already-processed budget alert event {}", eventId);
             return;
         }
-        if (processedEventRepository.existsById(eventId)) {
-            log.debug("Skipping already-processed event {}", eventId);
-            return;
-        }
-        try {
-            String title = "⚠️ Budget Alert";
-            String body = String.format(
-                    "You've used %.0f%% of your %s budget. Spent: ₹%.2f of ₹%.2f",
-                    event.getPercentageUsed(),
-                    event.getCategory(),
-                    event.getSpent(),
-                    event.getBudget()
-            );
-            notificationService.create(event.getUserId(), title, body, NotificationType.BUDGET_ALERT);
-            pushTokenService.sendToUser(event.getUserId(), title, body);
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(eventId)
-                    .consumerGroup(consumerGroup)
-                    .build());
-            log.info("Processed event {} for userId {}", eventId, event.getUserId());
-        } catch (DataIntegrityViolationException dup) {
-            log.debug("Concurrent processing of {} — swallowing dup marker error", eventId);
-        }
+        String title = "⚠️ Budget Alert";
+        String body = String.format("You've used %.0f%% of your %s budget. Spent: ₹%.2f of ₹%.2f", event.getPercentageUsed(), event.getCategory(), event.getSpent(), event.getBudget());
+        notificationService.create(event.getUserId(), title, body, NotificationType.BUDGET_ALERT);
+//            processedEventRepository.save(ProcessedEvent.builder().eventId(eventId).consumerGroup(consumerGroup).build());
+        log.info("Processed event {} for userId {}", eventId, event.getUserId());
 
 
     }
 
     @Transactional
-    @KafkaListener(
-            topics = "expense.created",
-            groupId = "${spring.kafka.consumer.group-id}",
-            containerFactory = "expenseCreatedKafkaListenerContainerFactory"
-    )
+    @KafkaListener(topics = "${spring.kafka.topic-expense-created.name:expense.created}",
+            groupId = "${spring.kafka.consumer.group-id:notification-service-group}",
+            containerFactory = "expenseCreatedKafkaListenerContainerFactory")
     public void handleExpenseCreated(ExpenseCreatedEvent event) {
-        log.info("Expense created for userId: {}", event.getUserId());
+        if (event == null || event.getUserId() == null || event.getEventId() == null) {
+            log.warn("Skipping invalid expense created event: payload, userId, or eventId is null");
+            return;
+        }
         String eventId = event.getEventId();
-        if (eventId == null) {
-            log.warn("Event without eventId for user with userId={}", event.getUserId());
+        log.info("Expense created for userId: {}", event.getUserId());
+
+
+        int claimed = processedEventRepository.insertIfAbsent(eventId, consumerGroup, Instant.now());
+
+        if (claimed == 0) {
+            log.debug("Skipping already-processed expense created event {}", eventId);
             return;
         }
-        if (processedEventRepository.existsById(eventId)) {
-            log.debug("Skipping already-processed event {}", eventId);
-            return;
-        }
-        try {
-            Notification notification= notificationService.create(
-                    event.getUserId(),
-                    "Expense Recorded",
-                    "₹" + event.getAmount()
-                            + " spent on "
-                            + event.getCategory(),
-                    NotificationType.EXPENSE_CREATED
-            );
-
-            pushTokenService.sendToUser(event.getUserId(), notification.getTitle(),notification.getBody());
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(eventId)
-                    .consumerGroup(consumerGroup)
-                    .build());
-            log.info("Processed event {} for userId {}", eventId, event.getUserId());
-        } catch (DataIntegrityViolationException dup) {
-            log.debug("Concurrent processing of {} — swallowing dup marker error", eventId);
-        }
-
-
+        String title = "Expense Recorded";
+        String body = String.format("₹%.2f spent on %s", event.getAmount(), event.getCategory());
+        notificationService.create(event.getUserId(), title, body, NotificationType.EXPENSE_CREATED);
+//            processedEventRepository.save(ProcessedEvent.builder().eventId(eventId).consumerGroup(consumerGroup).build());
+        log.info("Processed event {} for userId {}", eventId, event.getUserId());
     }
 
 }

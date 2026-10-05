@@ -54,6 +54,8 @@ public class JwtUtil {
 
     public Claims extractClaims(String token) {
 
-        return Jwts.parser().verifyWith(signKey).build().parseSignedClaims(token).getPayload();
+        return Jwts.parser().verifyWith(signKey)
+                .requireIssuer("expense-tracker-auth")
+                .build().parseSignedClaims(token).getPayload();
     }
 }

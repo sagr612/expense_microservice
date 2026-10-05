@@ -139,9 +139,11 @@ public class ExpenseController {
     }
 
     @GetMapping("/budgets/status")
-    public ResponseEntity<List<BudgetStatusDto>> getBudgetStatus(Authentication authentication, @RequestParam int month, @RequestParam int year) {
+    public ResponseEntity<List<BudgetStatusDto>> getBudgetStatus(
+            Authentication authentication,
+            @RequestParam @Min(value = 1, message = "Month must be between 1 and 12") @Max(value = 12, message = "Month must be between 1 and 12") int month,
+            @RequestParam @Min(value = 2000, message = "Year must be >=2000") @Max(value = 9999, message = "Year must be <=9999") int year) {
         String userId = authentication.getName();
-
         log.info("budget status");
         return ResponseEntity.ok(budgetService.getBudgetStatus(userId, month, year));
     }

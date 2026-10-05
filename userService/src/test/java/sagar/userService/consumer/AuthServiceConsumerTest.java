@@ -14,6 +14,8 @@ import sagar.userService.entities.ProcessedEvent;
 import sagar.userService.repository.ProcessedEventRepository;
 import sagar.userService.services.UserService;
 
+import java.time.Instant;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThat;
@@ -41,17 +43,14 @@ class AuthServiceConsumerTest {
                 .userId("user-1").firstName("A").lastName("B")
                 .phoneNumber("9999999999").email("a@b.com").build();
 
-        when(processedEventRepository.existsById("evt-123")).thenReturn(false);
+        when(processedEventRepository.insertIfAbsent(eq("evt-123"), eq("userinfo-consumer-group"), any(Instant.class)))
+                .thenReturn(1);
         when(userService.upsertFromEvent(event)).thenReturn(event);
 
         authServiceConsumer.listen(event);
 
         verify(userService).upsertFromEvent(event);
-        // must record the marker inside the same transaction as the business op
-        ArgumentCaptor<ProcessedEvent> captor = ArgumentCaptor.forClass(ProcessedEvent.class);
-        verify(processedEventRepository).save(captor.capture());
-        assertThat(captor.getValue().getEventId()).isEqualTo("evt-123");
-        assertThat(captor.getValue().getConsumerGroup()).isEqualTo("userinfo-consumer-group");
+        verify(processedEventRepository).insertIfAbsent(eq("evt-123"), eq("userinfo-consumer-group"), any(Instant.class));
     }
 
     @Test
@@ -59,13 +58,13 @@ class AuthServiceConsumerTest {
         UserInfoDto event = UserInfoDto.builder()
                 .eventId("evt-123").userId("user-1").build();
 
-        when(processedEventRepository.existsById("evt-123")).thenReturn(true);
+        when(processedEventRepository.insertIfAbsent(eq("evt-123"), eq("userinfo-consumer-group"), any(Instant.class)))
+                .thenReturn(0);
 
         authServiceConsumer.listen(event);
 
-        // this is the whole point of idempotency: never re-run the business op
+
         verify(userService, never()).upsertFromEvent(any());
-        verify(processedEventRepository, never()).save(any());
     }
 
 
@@ -79,8 +78,7 @@ class AuthServiceConsumerTest {
 
         // no eventId → skip dedup entirely, process as at-least-once
         verify(userService).upsertFromEvent(event);
-        verify(processedEventRepository, never()).existsById(anyString());
-        verify(processedEventRepository, never()).save(any());
+        verifyNoInteractions(processedEventRepository);
     }
 
     @Test
@@ -88,7 +86,9 @@ class AuthServiceConsumerTest {
         UserInfoDto event = UserInfoDto.builder()
                 .eventId("evt-123").userId("user-1").build();
 
-        when(processedEventRepository.existsById("evt-123")).thenReturn(false);
+        when(processedEventRepository.insertIfAbsent(eq("evt-123"), eq("userinfo-consumer-group"), any(Instant.class)))
+                .thenReturn(1);
+
         when(userService.upsertFromEvent(event))
                 .thenThrow(new RuntimeException("downstream DB unavailable"));
 

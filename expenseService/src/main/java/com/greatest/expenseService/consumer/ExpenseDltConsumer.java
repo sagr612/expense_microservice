@@ -21,7 +21,10 @@ public class ExpenseDltConsumer {
     private final FailedEventService failedEventService;
 
     @KafkaListener(
-            topics = "${spring.kafka.topic-expense-create-request.name:expense.create.request}.DLT",
+            topics = {
+                    "${spring.kafka.topic-expense-create-request.name:expense.create.request}.DLT",
+                    "${spring.kafka.topic-user-deleted.name:user.deleted}.DLT"
+            },
             groupId = "expenseService-dlt-group",
             containerFactory = "dltKafkaListenerContainerFactory"
     )

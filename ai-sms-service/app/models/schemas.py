@@ -1,9 +1,8 @@
-# app/models/schemas.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
 class SmsClassifyRequest(BaseModel):
-    smsText: str
+    smsText: str =Field(min_length=1, max_length=2000)
 
 class SmsExpenseEvent(BaseModel):
     externalId: str
@@ -26,3 +25,4 @@ class SmsClassifyResponse(BaseModel):
     confidence: float
     autoCreated: bool
     event: Optional[SmsExpenseEvent] = None
+    degraded: bool = False

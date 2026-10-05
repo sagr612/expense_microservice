@@ -4,10 +4,8 @@ import com.greatest.notification_service.dtos.BudgetAlertEvent;
 import com.greatest.notification_service.dtos.ExpenseCreatedEvent;
 import com.greatest.notification_service.entities.Notification;
 import com.greatest.notification_service.entities.NotificationType;
-import com.greatest.notification_service.entities.ProcessedEvent;
 import com.greatest.notification_service.repositories.ProcessedEventRepository;
 import com.greatest.notification_service.services.NotificationService;
-import com.greatest.notification_service.services.PushTokenService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -15,18 +13,17 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
+
 @ExtendWith(MockitoExtension.class)
 class NotificationEventConsumerTest {
 
-    @Mock private PushTokenService pushTokenService;
     @Mock private NotificationService notificationService;
     @Mock private ProcessedEventRepository processedEventRepository;
 
@@ -41,7 +38,7 @@ class NotificationEventConsumerTest {
     @Nested
     class HandleBudgetAlert {
         @Test
-        void createsNotification_andSendsPush_andRecordsMarker() {
+        void createsNotification_whenEventIsClaimed() {
             BudgetAlertEvent event = BudgetAlertEvent.builder()
                     .eventId("evt-1")
                     .userId("user-1")
@@ -50,24 +47,23 @@ class NotificationEventConsumerTest {
                     .spent(BigDecimal.valueOf(800))
                     .budget(BigDecimal.valueOf(1000))
                     .build();
-            when(processedEventRepository.existsById("evt-1")).thenReturn(false);
+            when(processedEventRepository.insertIfAbsent(eq("evt-1"), anyString(), any(Instant.class)))
+                    .thenReturn(1);
 
             consumer.handleBudgetAlert(event);
 
             verify(notificationService).create(eq("user-1"), anyString(), anyString(), eq(NotificationType.BUDGET_ALERT));
-            verify(pushTokenService).sendToUser(eq("user-1"), anyString(), anyString());
-            verify(processedEventRepository).save(any(ProcessedEvent.class));
         }
 
         @Test
-        void skipsAlreadyProcessedEvent() {
+        void skipsAlreadyProcessedEvent_whenClaimReturnsZero() {
             BudgetAlertEvent event = BudgetAlertEvent.builder().eventId("evt-1").userId("u1").build();
-            when(processedEventRepository.existsById("evt-1")).thenReturn(true);
+            when(processedEventRepository.insertIfAbsent(eq("evt-1"), anyString(), any(Instant.class)))
+                    .thenReturn(0);
 
             consumer.handleBudgetAlert(event);
 
-            verifyNoInteractions(notificationService, pushTokenService);
-            verify(processedEventRepository, never()).save(any());
+            verifyNoInteractions(notificationService);
         }
 
         @Test
@@ -76,39 +72,35 @@ class NotificationEventConsumerTest {
 
             consumer.handleBudgetAlert(event);
 
-            verifyNoInteractions(notificationService, pushTokenService, processedEventRepository);
-            // note: existsById is never called because we short-circuit before it
-        }
-
-        @Test
-        void swallowsDuplicateMarkerInsert_whenTwoConsumersRace() {
-            BudgetAlertEvent event = BudgetAlertEvent.builder().eventId("evt-1").userId("u1")
-                    .category("F").percentageUsed(50.0)
-                    .spent(BigDecimal.ONE).budget(BigDecimal.TEN).build();
-            when(processedEventRepository.existsById("evt-1")).thenReturn(false);
-            when(processedEventRepository.save(any())).thenThrow(new DataIntegrityViolationException("dup"));
-
-            // must NOT propagate — dedup race is harmless
-            assertThatCode(() -> consumer.handleBudgetAlert(event)).doesNotThrowAnyException();
+            verifyNoInteractions(processedEventRepository);
+            verifyNoInteractions(notificationService);
         }
     }
 
     @Nested
     class HandleExpenseCreated {
         @Test
-        void createsExpenseNotification_andSendsPush() {
+        void createsExpenseNotification_whenEventIsClaimed() {
             ExpenseCreatedEvent event = ExpenseCreatedEvent.builder()
                     .eventId("evt-2").userId("user-1")
                     .amount(BigDecimal.valueOf(50)).category("FOOD").build();
-            when(processedEventRepository.existsById("evt-2")).thenReturn(false);
-            when(notificationService.create(any(), any(), any(), any()))
-                    .thenReturn(Notification.builder().title("Expense Recorded").body("₹50 spent on FOOD").build());
+            when(processedEventRepository.insertIfAbsent(eq("evt-2"), anyString(), any(Instant.class)))
+                    .thenReturn(1);
 
             consumer.handleExpenseCreated(event);
 
             verify(notificationService).create(eq("user-1"), eq("Expense Recorded"), contains("50"), eq(NotificationType.EXPENSE_CREATED));
-            verify(pushTokenService).sendToUser(eq("user-1"), eq("Expense Recorded"), anyString());
-            verify(processedEventRepository).save(any(ProcessedEvent.class));
+        }
+
+        @Test
+        void skipsAlreadyProcessedEvent_whenClaimReturnsZero() {
+            ExpenseCreatedEvent event = ExpenseCreatedEvent.builder().eventId("evt-2").userId("user-1").build();
+            when(processedEventRepository.insertIfAbsent(eq("evt-2"), anyString(), any(Instant.class)))
+                    .thenReturn(0);
+
+            consumer.handleExpenseCreated(event);
+
+            verifyNoInteractions(notificationService);
         }
     }
 }
