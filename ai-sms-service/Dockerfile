@@ -11,7 +11,8 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser \
     && chown -R appuser:appgroup /app
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=1000 --retries 10 -r requirements.txt
+
 
 COPY --chown=appuser:appgroup . .
 

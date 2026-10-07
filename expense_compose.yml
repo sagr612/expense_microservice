@@ -41,6 +41,7 @@ services:
       POSTGRES_DB: userservice
     volumes:
       - postgres-local-data:/var/lib/postgresql/data
+      - ./init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
     networks:
       - expense-network
 
@@ -174,6 +175,119 @@ services:
       start_period: 25s
     networks:
       - expense-network
+  user-service:
+    build:
+      context: ./userService
+      dockerfile: Dockerfile
+    container_name: user-service
+    ports:
+      - "9001:9001"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - REDIS_HOST=redis
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-local:29092
+      - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - EUREKA_URI=http://service-discovery:8761/eureka/
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_started
+      zipkin:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - expense-network
+
+  expense-service:
+    build:
+      context: ./expenseService
+      dockerfile: Dockerfile
+    container_name: expense-service
+    ports:
+      - "9810:9810"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-local:29092
+      - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - EUREKA_URI=http://service-discovery:8761/eureka/
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      kafka:
+        condition: service_started
+      zipkin:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - expense-network
+
+  notification-service:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    container_name: notification-service
+    ports:
+      - "9500:9500"
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-local:29092
+      - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - EUREKA_URI=http://service-discovery:8761/eureka/
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+      kafka:
+        condition: service_started
+      zipkin:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - expense-network
+
+  ai-sms-service:
+    build:
+      context: ./ai-sms-service
+      dockerfile: Dockerfile
+    container_name: ai-sms-service
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka-local:29092
+      - ZIPKIN_ENDPOINT=http://zipkin:9411/api/v2/spans
+      - EUREKA_URI=http://service-discovery:8761/eureka/
+      - SERVICE_PORT=8000
+    depends_on:
+      service-discovery:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      zipkin:
+        condition: service_started
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - expense-network
+
 
 
 
