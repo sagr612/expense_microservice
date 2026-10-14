@@ -98,7 +98,7 @@ resilience4j:
         base-config: default
       ai-service-cb:
         base-config: default
-        slow-call-duration-threshold: 10s
+        slow-call-duration-threshold: 15s
 
   timelimiter:
     configs:
@@ -108,4 +108,4 @@ resilience4j:
       user-service-cb:
         timeout-duration: 30s        # ← this is the one that was missing
       ai-service-cb:
-        timeout-duration: 15s
+        timeout-duration: 20s

@@ -57,6 +57,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(DuplicateResourceException.class)
     public ResponseEntity<ErrorResponse> handleDuplicate(DuplicateResourceException ex) {
+        log.warn("Duplicate resource conflict: {}", ex.getMessage());
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.CONFLICT.value())
@@ -82,7 +83,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(ResourceNotFoundException ex) {
-
+        log.warn("Resource not found: {}", ex.getMessage());
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.NOT_FOUND.value())
@@ -98,7 +99,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(UnauthorizedException.class)
     public ResponseEntity<ErrorResponse> handleUnauthorized(
             UnauthorizedException ex) {
-
+        log.warn("Unauthorized access attempt: {}", ex.getMessage());
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.UNAUTHORIZED.value())
@@ -111,6 +112,7 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(InvalidTokenException.class)
     public ResponseEntity<ErrorResponse> handleInvalidToken(InvalidTokenException ex) {
+        log.warn("Invalid token: {}", ex.getMessage());
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.UNAUTHORIZED.value())
@@ -122,6 +124,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(TokenExpiredException.class)
     public ResponseEntity<ErrorResponse> handleExpiredToken(TokenExpiredException ex) {
+        log.warn("Token expired: {}", ex.getMessage());
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.UNAUTHORIZED.value())
@@ -137,6 +140,7 @@ public class GlobalExceptionHandler {
         ex.getBindingResult().getFieldErrors().forEach(error ->
                 errors.put(error.getField(), error.getDefaultMessage())
         );
+        log.warn("Validation failed for fields: {}", errors);
 
         ErrorResponse errorResponse = ErrorResponse.builder()
                 .timestamp(Instant.now())
@@ -151,6 +155,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("Illegal argument  in request");
+
         return ResponseEntity.badRequest().body(ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.BAD_REQUEST.value())
@@ -161,6 +167,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
     public ResponseEntity<ErrorResponse> handleMalformedJson(org.springframework.http.converter.HttpMessageNotReadableException ex) {
+        log.warn("Malformed JSON payload in request");
         return ResponseEntity.badRequest().body(ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.BAD_REQUEST.value())
@@ -171,6 +178,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<ErrorResponse> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        log.warn("Database constraint violation: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse.builder()
                 .timestamp(Instant.now())
                 .statusCode(HttpStatus.CONFLICT.value())

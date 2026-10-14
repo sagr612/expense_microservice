@@ -17,16 +17,33 @@ public class OutboxEvent {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private String id;
-    private String aggregateId;      // userId
-    private String eventType;        // "USER_CREATED"
+
+    private String aggregateId;
+
+    private String eventType;
+
     @Column(columnDefinition = "TEXT")
-    private String payload;          // JSON
+    private String payload;
+
     @CreationTimestamp
     private Instant createdAt;
+
     private boolean published;
-    @Column(nullable = false) @Builder.Default private int attemptCount = 0;
-    @Column(nullable = false) @Builder.Default private Instant nextRetryAt = Instant.now();
-    @Column(columnDefinition = "TEXT") private String lastError;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private int attemptCount = 0;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Instant nextRetryAt = Instant.now();
+
+    @Column(columnDefinition = "TEXT")
+    private String lastError;
+
+    @Column(name = "traceparent", length = 255)
+    private String traceparent;
+
 
     @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) @Builder.Default
     private OutboxStatus status = OutboxStatus.PENDING;

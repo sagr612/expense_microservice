@@ -6,6 +6,7 @@ import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
 import com.greatest.expenseService.repository.ExpenseRepository;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -42,6 +43,9 @@ class ExpenseServiceTest {
 
     @Mock
     private ObjectMapper objectMapper;
+    @Mock
+    private Tracer tracer;
+
 
     @InjectMocks
     private ExpenseService expenseService;

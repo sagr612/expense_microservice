@@ -31,7 +31,7 @@ spring:
       name: user.deleted
     listener:
       observation-enabled: true
-    producer:
+    template:
       observation-enabled: true
     consumer:
       group-id: userinfo-consumer-group

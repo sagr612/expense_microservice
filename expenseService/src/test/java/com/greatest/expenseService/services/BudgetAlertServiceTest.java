@@ -9,6 +9,7 @@ import com.greatest.expenseService.entities.OutboxEvent;
 import com.greatest.expenseService.repository.BudgetRepository;
 import com.greatest.expenseService.repository.ExpenseRepository;
 import com.greatest.expenseService.repository.OutboxRepository;
+import io.micrometer.tracing.Tracer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,14 +29,19 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class BudgetAlertServiceTest {
 
-    @Mock private BudgetRepository budgetRepository;
-    @Mock private ExpenseRepository expenseRepository;
-    @Mock private OutboxRepository outboxRepository;
-    @Mock private ObjectMapper objectMapper;
+    @Mock
+    private BudgetRepository budgetRepository;
+    @Mock
+    private ExpenseRepository expenseRepository;
+    @Mock
+    private OutboxRepository outboxRepository;
+    @Mock
+    private ObjectMapper objectMapper;
+    @Mock
+    private Tracer tracer;
 
     @InjectMocks
     private BudgetAlertService budgetAlertService;
-
 
 
     private Expense expenseOf(BigDecimal amount, CategoryType category, LocalDate date) {

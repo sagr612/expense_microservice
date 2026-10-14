@@ -7,6 +7,7 @@ import com.greatest.expenseService.entities.OutboxEvent;
 import com.greatest.expenseService.entities.OutboxEvent.OutboxStatus;
 import com.greatest.expenseService.producer.OutboxEventPublisher;
 import com.greatest.expenseService.repository.OutboxRepository;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,7 @@ class OutboxEventPublisherTest {
                 .status(OutboxStatus.PROCESSING)
                 .build();
 
-        when(kafkaTemplate.send(eq("expense.created"), eq("user-1"), any()))
+        when(kafkaTemplate.send( any(ProducerRecord.class)))
                 .thenReturn(CompletableFuture.completedFuture(null));
 
         outboxEventPublisher.processOne(event);
@@ -84,7 +85,7 @@ class OutboxEventPublisherTest {
 
         CompletableFuture<Object> failedFuture = new CompletableFuture<>();
         failedFuture.completeExceptionally(new RuntimeException("Kafka failed"));
-        when(kafkaTemplate.send(anyString(), anyString(), any()))
+        when(kafkaTemplate.send(any(ProducerRecord.class)))
                 .thenReturn((CompletableFuture) failedFuture);
         outboxEventPublisher.processOne(event);
         assertThat(event.getStatus()).isEqualTo(OutboxStatus.PENDING);

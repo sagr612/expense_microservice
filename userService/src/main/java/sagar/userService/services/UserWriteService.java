@@ -2,6 +2,8 @@ package sagar.userService.services;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,6 +35,7 @@ public class UserWriteService {
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
     private final CloudinaryService cloudinaryService;
+    private final Tracer tracer;
 
     @Transactional
     public UserInfoDto createOrUpdateUserInternal(UserInfoDto userInfoDto) {
@@ -87,21 +90,33 @@ public class UserWriteService {
         userRepository.delete(userInfo);
         log.info("User deleted successfully: {}", userId);
         UserDeletedEvent userDeletedEvent = UserDeletedEvent.builder()
-
                 .userId(userId)
                 .build();
+
+        Span currentSpan = tracer.currentSpan();
+        String traceparent = null;
+        if (currentSpan != null) {
+            traceparent = String.format("00-%s-%s-01",
+                    currentSpan.context().traceId(),
+                    currentSpan.context().spanId());
+        }
+
         OutboxEvent event = OutboxEvent.builder()
                 .aggregateId(userId)
                 .eventType("USER_DELETED")
                 .payload(toJson(userDeletedEvent))
+                .traceparent(traceparent)
                 .published(false)
                 .build();
 
         outboxRepository.save(event);
     }
 
-//    @Transactional
+    //    @Transactional
     public UserProfileImageResponse updateProfileImageInternal(String userId, MultipartFile file) {
+        log.info("Initiating profile image update for userId: {}, fileName: {}, size: {} bytes",
+                userId, file.getOriginalFilename(), file.getSize());
+
         UserInfo user = userRepository.findByUserId(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with userId: " + userId));
 
@@ -116,6 +131,7 @@ public class UserWriteService {
             user.setProfilePic(newUrl);
             user.setProfileImagePublicId(newPublicId);
             userRepository.save(user);
+            log.info("Profile image URL and publicId saved to database for userId: {}", userId);
         } catch (RuntimeException dbEx) {
             // DB save failed → the just-uploaded new image is now orphaned in Cloudinary.
 
@@ -134,12 +150,12 @@ public class UserWriteService {
         if (oldPublicId != null) {
             try {
                 cloudinaryService.delete(oldPublicId);
+                log.info("Deleted old profile image {} for userId: {}", oldPublicId, userId);
             } catch (Exception e) {
-                // don't fail the request over cleanup — just log it for a later sweep
                 log.warn("Failed to delete old profile image {} for user {}", oldPublicId, userId, e);
             }
         }
-
+        log.info("Profile image update fully completed for userId: {}", userId);
         return new UserProfileImageResponse(user.getUserId(), user.getProfilePic());
     }
 

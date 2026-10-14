@@ -52,6 +52,10 @@ public class OutboxEvent {
 
     private Instant lockedUntil;
 
+    @Column(name = "traceparent", length = 255)
+    private String traceparent;
+
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

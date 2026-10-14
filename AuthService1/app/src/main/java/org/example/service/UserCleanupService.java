@@ -39,7 +39,9 @@ public class UserCleanupService {
 
     @Scheduled(cron = "0 0 3 * * ?") // Runs daily at 3 AM
     public void cleanupExpiredPasswordTokens() {
+        log.info("Starting scheduled cleanup of expired password reset tokens");
         passwordResetTokenRepository.deleteExpiredTokens(Instant.now());
+        log.info("Completed scheduled cleanup of expired password reset tokens");
     }
 
 }

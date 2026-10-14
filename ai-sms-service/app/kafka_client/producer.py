@@ -6,6 +6,7 @@ import json
 
 from kafka import KafkaAdminClient, KafkaProducer
 from kafka.errors import KafkaError
+from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
 logger = logging.getLogger(__name__)
 
@@ -97,10 +98,21 @@ def publish_expense_event(event: Dict[str, Any]) -> bool:
     the expense was accepted for asynchronous processing.
     """
     try:
+        carrier = {}
+        TraceContextTextMapPropagator().inject(carrier)
+        kafka_headers = [(k, v.encode("utf-8")) for (k, v) in carrier.items()]
+
+        if "traceparent" in carrier:
+            parts = carrier["traceparent"].split("-")
+            if len(parts) >= 3:
+                b3_val = f"{parts[1]}-{parts[2]}-1"
+                kafka_headers.append(("b3", b3_val.encode("utf-8")))
+
         future = _get_producer().send(
             "expense.create.request",
             key=event["userId"],
             value=event,
+            headers=kafka_headers,
         )
         # Block up to 15s for broker acknowledgement. On timeout or broker
         # error, this raises KafkaError (or a subclass).

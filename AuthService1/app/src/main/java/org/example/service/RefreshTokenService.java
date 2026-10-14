@@ -1,6 +1,7 @@
 package org.example.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
 import org.example.entities.UserRole;
@@ -27,6 +28,7 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 @Transactional
+@Slf4j
 public class RefreshTokenService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final UserRepository userRepository;
@@ -47,7 +49,7 @@ public class RefreshTokenService {
 
     @Transactional
     public RefreshTokenResponse createRefreshToken(String username) {
-        UserInfo userInfo = userRepository.findByUsername(username).orElseThrow(()-> new UsernameNotFoundException("User not found"));
+        UserInfo userInfo = userRepository.findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
 
         if (userInfo == null) {
             throw new UsernameNotFoundException("User not found: " + username);
@@ -66,8 +68,7 @@ public class RefreshTokenService {
                 .expiryDate(Instant.now().plusMillis(refreshTokenExpiration))
                 .build();
         RefreshToken saved = refreshTokenRepository.save(refreshToken);
-
-
+        log.debug("Created new refresh token for user: {}", username);
         return RefreshTokenResponse.builder().token(rawToken).expiryDate(saved.getExpiryDate()).build();
     }
 
@@ -79,6 +80,7 @@ public class RefreshTokenService {
 
     public RefreshToken verifyExpirationAndDeleteIfExpired(RefreshToken token) {
         if (token.getExpiryDate().compareTo(Instant.now()) < 0) {
+            log.warn("Refresh token expired for userId: {}. Deleting token.", token.getUserInfo() != null ? token.getUserInfo().getUserId() : "unknown");
             refreshTokenRepository.delete(token);
             throw new TokenExpiredException("Refresh token expired. Please login again.");
         }
@@ -87,7 +89,9 @@ public class RefreshTokenService {
 
     @Scheduled(cron = "0 0 2 * * ?") // Run daily at 2 AM
     public void cleanupExpiredTokens() {
+        log.info("Starting scheduled cleanup of expired refresh tokens");
         refreshTokenRepository.deleteByExpiryDateBefore(Instant.now());
+        log.info("Completed cleanup of expired refresh tokens");
     }
 
     public void delete(RefreshToken oldToken) {
@@ -96,6 +100,7 @@ public class RefreshTokenService {
 
     @Transactional
     public JwtResponseDTO rotateRefreshToken(String token) {
+
         RefreshToken oldToken = findByToken(token)
                 .orElseThrow(() -> new InvalidTokenException("Refresh token not found"));
 
@@ -107,6 +112,8 @@ public class RefreshTokenService {
         RefreshTokenResponse newRefresh = createRefreshToken(user.getUsername());
         String newAccess = jwtService.generateToken(user.getUsername(), user.getUserId(),
                 user.getRoles().stream().map(UserRole::name).toList());
+        log.info("Rotating refresh token for userId: {}", user.getUserId());
+
         return JwtResponseDTO.builder().token(newRefresh.getToken()).accessToken(newAccess).build();
     }
 }

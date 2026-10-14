@@ -3,6 +3,7 @@ package org.example.controller;
 
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.example.entities.UserInfo;
 import org.example.exceptions.UnauthorizedException;
 import org.example.model.RefreshTokenResponse;
@@ -25,6 +26,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/auth/v1")
 @RequiredArgsConstructor
+@Slf4j
 public class AuthController {
     private final JwtService jwtService;
     private final RefreshTokenService refreshTokenService;
@@ -32,7 +34,7 @@ public class AuthController {
 
     @PostMapping("/signup")
     public ResponseEntity<JwtResponseDTO> signUp(@Valid @RequestBody UserInfoDto userInfoDto) {
-
+        log.info("Processing signup request for user: {}", userInfoDto.getUsername());
         UserInfo user = userDetailsService.signupUser(userInfoDto);
         RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(userInfoDto.getUsername());
         String jwtToken = jwtService.generateToken(

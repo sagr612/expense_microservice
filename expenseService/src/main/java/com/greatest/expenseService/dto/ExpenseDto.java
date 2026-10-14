@@ -28,7 +28,7 @@ public class ExpenseDto {
     private String userId;
 
     @NotNull(message = "Amount is required")
-    @DecimalMin(value = "-999999.99", message = "Amount must be greater than -999999.99")
+    @DecimalMin(value = "0", message = "Amount must be greater than 0")
     @DecimalMax(value = "999999.99", message = "Amount must be less than 999999.99")
     private BigDecimal amount;
 

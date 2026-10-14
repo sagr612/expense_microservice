@@ -53,7 +53,8 @@ spring:
 
     topics:
       user-deleted: user.deleted
-
+    template:
+      observation-enabled: true
     listener:
       observation-enabled: true
 

@@ -20,7 +20,7 @@ public class PushTokenService {
     @Transactional
     public void saveToken(String userId, String expoToken) {
         if(userId == null || expoToken == null) {
-            log.error("Error saving push token");
+            log.warn("Cannot save push token: userId or expoToken is null");
             return;
         }
         pushTokenRepository
@@ -50,7 +50,7 @@ public class PushTokenService {
 
     public void sendToUser(String userId, String title, String body, Map<String, Object> data) {
         if(userId==null || title==null || body==null) {
-            log.error("Error sending push token");
+            log.warn("Cannot send push notification: userId, title, or body is null");
             return;
         }
         pushTokenRepository.findByUserId(userId)

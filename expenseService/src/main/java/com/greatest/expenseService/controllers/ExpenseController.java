@@ -42,9 +42,17 @@ public class ExpenseController {
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("createdAt", "updatedAt", "transactionDate", "amount", "title", "currency", "category", "type");
 
     @GetMapping
-    public ResponseEntity<Page<ExpenseDto>> getExpenses(Authentication authentication, @RequestParam(required = false) CategoryType category, @RequestParam(required = false) ExpenseType type, @RequestParam(required = false) BigDecimal minAmount, @RequestParam(required = false) BigDecimal maxAmount, @RequestParam(required = false) LocalDate fromDate, @RequestParam(required = false) LocalDate toDate, @RequestParam(defaultValue = "0") @Min(value = 0, message = "Page must be greater than or equal to zero") int page, @RequestParam(defaultValue = "10") @Min(value = 1, message = "Size must be at least 1") @Max(value = 100, message = "Size must not exceed 100") int size,
-
-                                                        @RequestParam(defaultValue = "createdAt") String sortBy, @RequestParam(defaultValue = "false") boolean ascending) {
+    public ResponseEntity<Page<ExpenseDto>> getExpenses(
+            Authentication authentication,
+            @RequestParam(required = false) CategoryType category,
+            @RequestParam(required = false) ExpenseType type,
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestParam(required = false) BigDecimal maxAmount,
+            @RequestParam(required = false) LocalDate fromDate,
+            @RequestParam(required = false) LocalDate toDate,
+            @RequestParam(defaultValue = "0") @Min(value = 0, message = "Page must be greater than or equal to zero") int page,
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "Size must be at least 1") @Max(value = 100, message = "Size must not exceed 100") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy, @RequestParam(defaultValue = "false") boolean ascending) {
         String userId = authentication.getName();
         if (!ALLOWED_SORT_FIELDS.contains(sortBy)) {
             throw new IllegalArgumentException("Invalid sort field. Allowed values: " + ALLOWED_SORT_FIELDS);
@@ -53,7 +61,7 @@ public class ExpenseController {
         Sort sort = ascending ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
         Pageable pageable = PageRequest.of(page, size, sort);
-
+        log.info("GET /api/v1/expenses - userId={}, page={}, size={}, sortBy={}", userId, page, size, sortBy);
 
         return ResponseEntity.ok(expenseService.searchExpenses(userId, category, type, minAmount, maxAmount, fromDate, toDate, pageable));
     }
@@ -118,15 +126,17 @@ public class ExpenseController {
 
 
     @GetMapping("/analytics/category")
-    public ResponseEntity<CategoryAnalyticsResponse> getCategoryAnalytics(Authentication authentication) {
+    public ResponseEntity<CategoryAnalyticsResponse> getCategoryAnalytics(
+            Authentication authentication) {
         String userId = authentication.getName();
-        log.info("Getting analytics by category");
+        log.info("GET /api/v1/expenses/analytics/category - userId={}", userId);
         return ResponseEntity.ok(expenseService.getCategoryAnalytics(userId));
     }
 
     @GetMapping("/analytics/monthly")
     public ResponseEntity<List<MonthlyAnalyticsDto>> getMonthlyAnalytics(Authentication authentication) {
         String userId = authentication.getName();
+        log.info("GET /api/v1/expenses/analytics/monthly - userId={}", userId);
         return ResponseEntity.ok(expenseService.getMonthlyAnalytics(userId));
     }
 
@@ -134,7 +144,7 @@ public class ExpenseController {
     @PostMapping("/budgets")
     public ResponseEntity<BudgetDto> createBudget(Authentication authentication, @RequestBody @Valid BudgetDto dto) {
         String userId = authentication.getName();
-
+        log.info("POST /api/v1/expenses/budgets - userId={}, category={}", userId, dto.getCategory());
         return ResponseEntity.ok(budgetService.createBudget(userId, dto));
     }
 
@@ -144,7 +154,7 @@ public class ExpenseController {
             @RequestParam @Min(value = 1, message = "Month must be between 1 and 12") @Max(value = 12, message = "Month must be between 1 and 12") int month,
             @RequestParam @Min(value = 2000, message = "Year must be >=2000") @Max(value = 9999, message = "Year must be <=9999") int year) {
         String userId = authentication.getName();
-        log.info("budget status");
+        log.info("GET /api/v1/expenses/budgets/status - userId={}, month={}/{}", userId, month, year);
         return ResponseEntity.ok(budgetService.getBudgetStatus(userId, month, year));
     }
 }

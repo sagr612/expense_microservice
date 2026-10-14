@@ -1,6 +1,7 @@
 package sagar.userService.producer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -56,7 +57,7 @@ public class OutboxEventPublisherTest {
     @Test
     void processOne_marksEventPublished_onSuccess() {
         OutboxEvent event = pending("outbox-1", 0);
-        when(kafkaTemplate.send(anyString(), anyString(), any(UserDeletedEvent.class))).thenReturn(CompletableFuture.completedFuture(null));
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(CompletableFuture.completedFuture(null));
 
         publisher.processOne(event);
 
@@ -69,7 +70,7 @@ public class OutboxEventPublisherTest {
     @Test
     void processOne_incrementsAttemptAndReschedules_onTransientFailure() {
         OutboxEvent event = pending("outbox-1", 0);
-        when(kafkaTemplate.send(anyString(), anyString(), any(UserDeletedEvent.class))).thenReturn(CompletableFuture.failedFuture(new RuntimeException("Kafka unavailable")));
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(CompletableFuture.failedFuture(new RuntimeException("Kafka unavailable")));
 
         publisher.processOne(event);
 

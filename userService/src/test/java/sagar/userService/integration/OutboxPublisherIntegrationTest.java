@@ -1,5 +1,6 @@
 package sagar.userService.integration;
 
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
@@ -97,7 +98,7 @@ public class OutboxPublisherIntegrationTest {
     void publishFailure_appliesExponentialBackoffAndRecordsError() {
         OutboxEvent event = createPendingEvent("user-fail-1");
 
-        doThrow(new RuntimeException("Simulated Kafka broker failure")).when(kafkaTemplate).send(anyString(), anyString(), any());
+        doThrow(new RuntimeException("Simulated Kafka broker failure")).when(kafkaTemplate).send(any(ProducerRecord.class));
 
         List<OutboxEvent> claimed = outboxClaimService.claimEvents(Instant.now(), Duration.ofMinutes(1), 10);
 
@@ -120,7 +121,7 @@ public class OutboxPublisherIntegrationTest {
         event.setAttemptCount(9);
         outboxRepository.save(event);
 
-        doThrow(new RuntimeException("Simulated Unrecoverable Error")).when(kafkaTemplate).send(anyString(), anyString(), any());
+        doThrow(new RuntimeException("Simulated Unrecoverable Error")).when(kafkaTemplate).send( any(ProducerRecord.class));
 
         List<OutboxEvent> claimed = outboxClaimService.claimEvents(Instant.now(), Duration.ofMinutes(1), 10);
 

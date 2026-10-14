@@ -42,13 +42,14 @@ public class NotificationController {
             @RequestParam(defaultValue = "0") @Min(0) int page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(50) int size) {
         String userId = authentication.getName();
+        log.info("GET /api/v1/notifications - userId={}, page={}, size={}", userId, page, size);
         return ResponseEntity.ok(notificationService.getNotifications(userId, page, size));
     }
 
     @PatchMapping("/{id}/read")
     public ResponseEntity<Void> markRead(@PathVariable String id, Authentication authentication) {
         String userId = authentication.getName();
-
+        log.info("PATCH /api/v1/notifications/{}/read - userId={}", id, userId);
         notificationService.markRead(id, userId);
         return ResponseEntity.ok().build();
     }
@@ -56,7 +57,7 @@ public class NotificationController {
     @GetMapping("/unread-count")
     public ResponseEntity<Long> unreadCount(Authentication authentication) {
         String userId = authentication.getName();
-
+        log.info("GET /api/v1/notifications/unread-count - userId={}", userId);
         return ResponseEntity.ok(notificationService.unreadCount(userId));
     }
 

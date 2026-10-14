@@ -210,38 +210,43 @@ class ExpenseServiceAdditionalTest {
 
         @Test
         void mapsCategoryAnalyticsDtoList_toResponseMap() {
-            List<CategoryAnalyticsDto> rows = List.of(
+            List<CategoryAnalyticsDto> expenseRows = List.of(
                     new CategoryAnalyticsDto(CategoryType.FOOD, BigDecimal.valueOf(500)),
                     new CategoryAnalyticsDto(CategoryType.TRANSPORT, BigDecimal.valueOf(200))
             );
+            List<CategoryAnalyticsDto> incomeRows = List.of(
+                    new CategoryAnalyticsDto(CategoryType.SALARY, BigDecimal.valueOf(5000))
+            );
             when(expenseRepository.getCategoryAnalytics("user-1", ExpenseType.EXPENSE))
-                    .thenReturn(rows);
-
+                    .thenReturn(expenseRows);
+            when(expenseRepository.getCategoryAnalytics("user-1", ExpenseType.INCOME))
+                    .thenReturn(incomeRows);
             CategoryAnalyticsResponse response = expenseService.getCategoryAnalytics("user-1");
-
-            assertThat(response.getAnalytics())
+            assertThat(response.getExpenses())
                     .containsEntry(CategoryType.FOOD, BigDecimal.valueOf(500))
                     .containsEntry(CategoryType.TRANSPORT, BigDecimal.valueOf(200));
+            assertThat(response.getIncome())
+                    .containsEntry(CategoryType.SALARY, BigDecimal.valueOf(5000));
         }
 
         @Test
         void returnsEmptyMap_whenNoExpensesExist() {
             when(expenseRepository.getCategoryAnalytics("user-1", ExpenseType.EXPENSE))
                     .thenReturn(List.of());
+            when(expenseRepository.getCategoryAnalytics("user-1", ExpenseType.INCOME))
+                    .thenReturn(List.of());
 
             CategoryAnalyticsResponse response = expenseService.getCategoryAnalytics("user-1");
 
-            assertThat(response.getAnalytics()).isEmpty();
+            assertThat(response.getExpenses()).isEmpty();
+            assertThat(response.getIncome()).isEmpty();
         }
 
         @Test
         void alwaysQueriesWithExpenseType_neverIncome() {
-            // category analytics is explicitly EXPENSE-only per the current implementation —
-            // this locks that decision in so nobody accidentally widens it without noticing
             expenseService.getCategoryAnalytics("user-1");
-
             verify(expenseRepository).getCategoryAnalytics("user-1", ExpenseType.EXPENSE);
-            verify(expenseRepository, never()).getCategoryAnalytics("user-1", ExpenseType.INCOME);
+            verify(expenseRepository).getCategoryAnalytics("user-1", ExpenseType.INCOME);
         }
     }
 
@@ -254,14 +259,12 @@ class ExpenseServiceAdditionalTest {
 
         @Test
         void mapsObjectArrayRows_toMonthlyAnalyticsDtoList() {
-            // the repository returns raw Object[] rows: [year, month, sum] — Number types
-            // can vary (Integer/Long/BigInteger depending on DB driver), so the service
-            // must defensively call .intValue() rather than a direct cast
+            // Raw Object[] row: [year, month, expenseSum, incomeSum]
             List<Object[]> rows = List.of(
-                    new Object[]{2026, 6, BigDecimal.valueOf(750)},
-                    new Object[]{2026, 7, BigDecimal.valueOf(1200)}
+                    new Object[]{2026, 6, BigDecimal.valueOf(750), BigDecimal.valueOf(1000)},
+                    new Object[]{2026, 7, BigDecimal.valueOf(1200), BigDecimal.valueOf(2000)}
             );
-            when(expenseRepository.getMonthlyAnalytics("user-1", ExpenseType.EXPENSE))
+            when(expenseRepository.getMonthlyAnalyticsCombined("user-1"))
                     .thenReturn(rows);
 
             List<MonthlyAnalyticsDto> result = expenseService.getMonthlyAnalytics("user-1");
@@ -269,33 +272,30 @@ class ExpenseServiceAdditionalTest {
             assertThat(result).hasSize(2);
             assertThat(result.get(0).getYear()).isEqualTo(2026);
             assertThat(result.get(0).getMonth()).isEqualTo(6);
-            assertThat(result.get(0).getTotalAmount()).isEqualTo(BigDecimal.valueOf(750));
+            assertThat(result.get(0).getTotalExpense()).isEqualTo(BigDecimal.valueOf(750));
+            assertThat(result.get(0).getTotalIncome()).isEqualTo(BigDecimal.valueOf(1000));
             assertThat(result.get(1).getMonth()).isEqualTo(7);
         }
 
         @Test
         void mapsCorrectly_whenYearAndMonthAreLongInsteadOfInteger() {
-            // regression guard: some JDBC drivers return EXTRACT(...) results as Long,
-            // not Integer — .intValue() on Number handles both, a hard cast to Integer
-            // would throw ClassCastException here
             List<Object[]> rows = List.of(
-                    new Object[]{2026L, 6L, BigDecimal.valueOf(300)},
-                    new Object[]{2026L, 5L, BigDecimal.valueOf(300)}
-
+                    new Object[]{2026L, 6L, BigDecimal.valueOf(300), BigDecimal.valueOf(500)},
+                    new Object[]{2026L, 5L, BigDecimal.valueOf(300), BigDecimal.valueOf(400)}
             );
-            when(expenseRepository.getMonthlyAnalytics("user-1", ExpenseType.EXPENSE))
+            when(expenseRepository.getMonthlyAnalyticsCombined("user-1"))
                     .thenReturn(rows);
-
             List<MonthlyAnalyticsDto> result = expenseService.getMonthlyAnalytics("user-1");
-
             assertThat(result).hasSize(2);
             assertThat(result.get(0).getYear()).isEqualTo(2026);
             assertThat(result.get(0).getMonth()).isEqualTo(6);
+            assertThat(result.get(0).getTotalExpense()).isEqualTo(BigDecimal.valueOf(300));
+            assertThat(result.get(0).getTotalIncome()).isEqualTo(BigDecimal.valueOf(500));
         }
 
         @Test
         void returnsEmptyList_whenNoExpensesExist() {
-            when(expenseRepository.getMonthlyAnalytics("user-1", ExpenseType.EXPENSE))
+            when(expenseRepository.getMonthlyAnalyticsCombined("user-1"))
                     .thenReturn(List.of());
 
             List<MonthlyAnalyticsDto> result = expenseService.getMonthlyAnalytics("user-1");
@@ -307,8 +307,7 @@ class ExpenseServiceAdditionalTest {
         void alwaysQueriesWithExpenseType_neverIncome() {
             expenseService.getMonthlyAnalytics("user-1");
 
-            verify(expenseRepository).getMonthlyAnalytics("user-1", ExpenseType.EXPENSE);
-            verify(expenseRepository, never()).getMonthlyAnalytics("user-1", ExpenseType.INCOME);
+            verify(expenseRepository).getMonthlyAnalyticsCombined("user-1");
         }
     }
 

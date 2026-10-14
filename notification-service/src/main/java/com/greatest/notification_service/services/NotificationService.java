@@ -30,7 +30,6 @@ public class NotificationService {
     public Notification create(String userId, String title, String body, NotificationType type) {
         Objects.requireNonNull(userId, "userId must not be null");
 
-        log.info("Notification created for  userId: {}", userId);
         Notification notification = Notification.builder()
                 .userId(userId)
                 .title(title)
@@ -40,6 +39,7 @@ public class NotificationService {
                 .build();
 
         Notification saved = repository.save(notification);
+        log.info("Notification created - id={}, userId={}, type={}", saved.getId(), userId, type);
         eventPublisher.publishEvent(new NotificationCreatedEvent(saved.getId(), userId, title, body, type));
         return saved;
     }
@@ -66,9 +66,11 @@ public class NotificationService {
         Notification notification = repository.findById(notificationId)
                 .orElseThrow(() -> new NotificationNotFoundException("Notification not found"));
         if (!notification.getUserId().equals(userId)) {
+            log.warn("Access denied: userId={} attempted to mark notification {} belonging to another user", userId, notificationId);
             throw new AccessDeniedException("Not your notification");
         }
         notification.setIsRead(true);
+        log.info("Notification marked as read - id={}, userId={}", notificationId, userId);
         repository.save(notification);
     }
 

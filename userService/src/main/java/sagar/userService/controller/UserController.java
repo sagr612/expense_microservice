@@ -32,16 +32,15 @@ public class UserController {
     @PostMapping
     @PreAuthorize("hasRole('ADMIN') or #request.userId == authentication.name")
     public ResponseEntity<UserResponse> createUser(@RequestBody @Valid CreateUserRequest request) {
+        log.info("POST /api/v1/users - Create user request for userId: {}", request.getUserId());
         UserResponse created = userService.createUser(request);
-        return ResponseEntity
-                .created(URI.create("/api/v1/users/" + created.getUserId()))
-                .body(created);
+        return ResponseEntity.created(URI.create("/api/v1/users/" + created.getUserId())).body(created);
     }
 
     @PutMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
-    public ResponseEntity<UserResponse> updateUser(@PathVariable String userId,
-                                                  @RequestBody @Valid UpdateUserRequest request) {
+    public ResponseEntity<UserResponse> updateUser(@PathVariable String userId, @RequestBody @Valid UpdateUserRequest request) {
+        log.info("PUT /api/v1/users/{} - Update user request", userId);
         UserResponse updated = userService.updateUser(userId, request);
         return ResponseEntity.ok(updated);
     }
@@ -49,9 +48,8 @@ public class UserController {
     @GetMapping("/{userId}")
     @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
     public ResponseEntity<UserResponse> getUser(@PathVariable String userId) {
-
+        log.debug("GET /api/v1/users/{} - Fetch user request", userId);
         UserResponse user = userService.getUserByUserId(userId);
-
         return ResponseEntity.ok(user);
     }
 
@@ -79,7 +77,7 @@ public class UserController {
     @PatchMapping(value = "/{userId}/profile-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('ADMIN') or #userId == authentication.name")
     public ResponseEntity<UserProfileImageResponse> uploadProfileImage(@PathVariable String userId, @RequestParam("image") MultipartFile file) {
-
+        log.info("PATCH /api/v1/users/{}/profile-image - Uploading file: {} ({} bytes)", userId, file.getOriginalFilename(), file.getSize());
         validator.validate(file);
         UserProfileImageResponse response = userService.updateProfileImage(userId, file);
         return ResponseEntity.ok(response);

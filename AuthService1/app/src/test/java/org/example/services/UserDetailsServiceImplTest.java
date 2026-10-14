@@ -1,6 +1,7 @@
 package org.example.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Tracer;
 import org.example.entities.PasswordResetToken;
 import org.example.entities.RefreshToken;
 import org.example.entities.UserInfo;
@@ -78,6 +79,9 @@ class UserDetailsServiceImplTest {
 
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
+
+    @Mock
+    private Tracer tracer;
 
     @BeforeEach
     void setup() {

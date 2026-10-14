@@ -1,7 +1,10 @@
 package org.example.service;
 
+import brave.Tracing;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +54,7 @@ public class UserDetailsServiceImpl implements UserDetailsService {
     private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final EmailService emailService;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final Tracer tracer;
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -93,14 +97,24 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
 
         UserInfo saved = userRepository.save(userInfo);
+        log.info("User signed up successfully. userId: {}, username: {}", saved.getUserId(), saved.getUsername());
         try {
+            Span currentSpan = tracer.currentSpan();
+            String traceparent = null;
+            if (currentSpan != null) {
+                traceparent = String.format("00-%s-%s-01",
+                        currentSpan.context().traceId(),
+                        currentSpan.context().spanId());
+            }
             OutboxEvent event = OutboxEvent.builder()
                     .aggregateId(saved.getUserId())
                     .eventType("USER_CREATED")
                     .payload(objectMapper.writeValueAsString(userInfoEventToPublish(dto, userInfo.getUserId())))
+                    .traceparent(traceparent)
                     .published(false)
                     .build();
             outboxRepository.save(event);
+            log.info("Outbox event USER_CREATED saved for aggregateId: {}", saved.getUserId());
         } catch (JsonProcessingException e) {
             log.error("Failed to process json object while converting :", e);
             throw new IllegalStateException("Failed to process json object while converting :", e);
@@ -138,9 +152,10 @@ public class UserDetailsServiceImpl implements UserDetailsService {
         }
 
         user.setPassword(passwordEncoder.encode(passwordDto.getNewPassword()));
-refreshTokenRepository.deleteByUserInfo(user);
+        refreshTokenRepository.deleteByUserInfo(user);
 
         RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(user.getUsername());
+        log.info("Password successfully updated in DB for userId: {}", userId);
         return JwtResponseDTO.builder()
                 .accessToken(jwtService.generateToken(user.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
                 .token(refreshToken.getToken())
@@ -184,6 +199,7 @@ refreshTokenRepository.deleteByUserInfo(user);
     public void forgotPassword(String email) {
         Optional<UserInfo> userOptional = userRepository.findByEmail(email);
         if (userOptional.isEmpty()) {
+            log.warn("Forgot password requested for non-existent email: {}", email);
             return;
         }
         UserInfo user = userOptional.get();
@@ -200,14 +216,15 @@ refreshTokenRepository.deleteByUserInfo(user);
         String resetLink = "expensetracker://reset-password?token=" + rawToken;
 
 
-        try{
+        try {
             emailService.sendEmail(
                     user.getEmail(),
                     "Reset Your Password",
                     "<h2>Reset Password</h2><a href='" + resetLink + "'>Reset</a> "
             );
-        }catch (Exception e){
-            log.warn("Unable to send email {}",e.getMessage());
+            log.info("Password reset token generated and email dispatched for userId: {}", user.getUserId());
+        } catch (Exception e) {
+            log.warn("Unable to send email {}", e.getMessage());
         }
 
     }
@@ -242,6 +259,8 @@ refreshTokenRepository.deleteByUserInfo(user);
         resetToken.setUsed(true);
 
         passwordResetTokenRepository.save(resetToken);
+        log.info("Password successfully reset using token for userId: {}", user.getUserId());
+
     }
 
 

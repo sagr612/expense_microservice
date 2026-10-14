@@ -1,9 +1,11 @@
 import asyncio
+import contextvars
 import hashlib
 import os
 from datetime import date
 from fastapi import FastAPI, Depends
 from dotenv import load_dotenv
+from fastapi.exceptions import RequestValidationError
 from prometheus_fastapi_instrumentator import Instrumentator
 
 load_dotenv()
@@ -111,8 +113,9 @@ async def classify(payload: SmsClassifyRequest, x_user_id: str = Depends(get_cur
             # kafka-python's .send().get() is blocking — run it in a threadpool
             # so it doesn't freeze the async event loop.
             loop = asyncio.get_running_loop()
+            ctx = contextvars.copy_context()
             published = await loop.run_in_executor(
-                None, publish_expense_event, event.model_dump()
+                None, ctx.run, publish_expense_event, event.model_dump()
             )
             auto_created = published
             if not published:
@@ -138,6 +141,20 @@ async def classify(payload: SmsClassifyRequest, x_user_id: str = Depends(get_cur
 
     return SmsClassifyResponse(
         label=label, confidence=confidence, autoCreated=auto_created, event=event, degraded=is_degraded
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "status": 422,
+            "error": "Unprocessable Entity",
+            "message": "Invalid or missing request body fields",
+            "details": exc.errors()
+        }
     )
 
 

@@ -1,6 +1,7 @@
 package sagar.userService.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.tracing.Tracer;
 import org.hibernate.sql.Update;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,13 +46,16 @@ class UserWriteServiceTest {
     @Mock
     private CloudinaryService cloudinaryService;
 
+    @Mock
+    private Tracer tracer;
+
     @BeforeEach
     void setUp() {
         // constructed manually (not @InjectMocks) so we control the real ObjectMapper.
         // Constructor order must match field declaration order in UserWriteService
         // (Lombok's @RequiredArgsConstructor generates params in declaration order):
         // userRepository, userDomainService, userDeletedProducer, outboxRepository, objectMapper
-        userWriteService = new UserWriteService(userRepository, userDomainService, outboxRepository, objectMapper, cloudinaryService);
+        userWriteService = new UserWriteService(userRepository, userDomainService, outboxRepository, objectMapper, cloudinaryService, tracer);
 
     }
     @Test

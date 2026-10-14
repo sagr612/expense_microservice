@@ -756,60 +756,60 @@ The **AI SMS Service** is an intelligent, high-throughput financial message clas
 
 ```mermaid
 graph TD
-    subgraph Client / Edge Gateway
-        Client([Mobile App / React Native])
-        Gateway[Spring Cloud Gateway<br/>Circuit Breaker: ai-service-cb<br/>Rate Limiting: Redis KeyResolver]
+    subgraph EdgeGateway ["Client / Edge Gateway"]
+        Client(["Mobile App / React Native"])
+        Gateway["Spring Cloud Gateway<br/>Circuit Breaker: ai-service-cb<br/>Rate Limiting: Redis KeyResolver"]
     end
 
-    subgraph AI SMS Service (FastAPI)
-        AuthDep[Auth Dependency<br/>PyJWT Base64 HMAC-SHA256]
-        ClassifyRoute[POST /api/v1/sms/classify]
-        GeminiClassifier[Async Gemini Classifier<br/>gemini-2.5-flash / Tenacity Retry]
-        RegexEngine[Deterministic Regex Engine<br/>Amount, Merchant & Category Heuristics]
-        Fingerprinter[Deterministic SHA-256 Fingerprint<br/>externalId = sms-{hash}]
-        ConfidenceGate{Confidence >= 0.85<br/>& Valid Amount?}
-        AsyncWorker[Async ThreadPool Executor<br/>loop.run_in_executor]
-        KafkaProducer[Resilient KafkaProducer<br/>acks=all, gzip, enable_idempotence=True]
-        EurekaClient[Eureka Registry Client<br/>Heartbeat & Fast Shutdown Deregistration]
-        HealthEngine[Actuator Health Engine<br/>Kafka Admin Cache & Secret Probes]
+    subgraph AISMS ["AI SMS Service (FastAPI)"]
+        AuthDep["Auth Dependency<br/>PyJWT Base64 HMAC-SHA256"]
+        ClassifyRoute["POST /api/v1/sms/classify"]
+        GeminiClassifier["Async Gemini Classifier<br/>gemini-2.5-flash / Tenacity Retry"]
+        RegexEngine["Deterministic Regex Engine<br/>Amount, Merchant & Category Heuristics"]
+        Fingerprinter["Deterministic SHA-256 Fingerprint<br/>externalId = sms-hash"]
+        ConfidenceGate{"Confidence >= 0.85<br/>& Valid Amount?"}
+        AsyncWorker["Async ThreadPool Executor<br/>loop.run_in_executor"]
+        KafkaProducer["Resilient KafkaProducer<br/>acks=all, gzip, enable_idempotence=True"]
+        EurekaClient["Eureka Registry Client<br/>Heartbeat & Fast Shutdown Deregistration"]
+        HealthEngine["Actuator Health Engine<br/>Kafka Admin Cache & Secret Probes"]
     end
 
-    subgraph External AI Platform
-        GeminiAPI[(Google GenAI API<br/>JSON Schema: SmsClassification)]
+    subgraph ExternalAI ["External AI Platform"]
+        GeminiAPI[("Google GenAI API<br/>JSON Schema: SmsClassification")]
     end
 
-    subgraph Messaging & Downstream Processing
-        KafkaTopic[[expense.create.request]]
-        ExpenseSvc[Expense Service<br/>ExpenseConsumer & Idempotent Ledger]
+    subgraph MessagingDownstream ["Messaging & Downstream Processing"]
+        KafkaTopic[["expense.create.request"]]
+        ExpenseSvc["Expense Service<br/>ExpenseConsumer & Idempotent Ledger"]
     end
 
-    subgraph Telemetry & Observability
-        Zipkin[(Zipkin / OTel Distributed Tracing)]
-        Prometheus[(Prometheus /metrics<br/>ai_sms_llm_failures_total)]
-        Promtail[(Promtail / Loki Log Collector)]
+    subgraph Telemetry ["Telemetry & Observability"]
+        Zipkin[("Zipkin / OTel Distributed Tracing")]
+        Prometheus[("Prometheus /metrics<br/>ai_sms_llm_failures_total")]
+        Promtail[("Promtail / Loki Log Collector")]
     end
 
-    Client -->|POST /api/v1/sms/classify| Gateway
-    Gateway -->|Verify JWT & Route lb://AI-SERVICE| AuthDep
-    AuthDep -->|Extract Verified userId| ClassifyRoute
-    ClassifyRoute -->|Non-blocking aio generate_content| GeminiClassifier
-    GeminiClassifier <-->|Structured JSON Schema| GeminiAPI
-    ClassifyRoute -->|Parallel Deterministic Extraction| RegexEngine
+    Client -->|"POST /api/v1/sms/classify"| Gateway
+    Gateway -->|"Verify JWT & Route lb://AI-SERVICE"| AuthDep
+    AuthDep -->|"Extract Verified userId"| ClassifyRoute
+    ClassifyRoute -->|"Non-blocking aio generate_content"| GeminiClassifier
+    GeminiClassifier <-->|"Structured JSON Schema"| GeminiAPI
+    ClassifyRoute -->|"Parallel Deterministic Extraction"| RegexEngine
     ClassifyRoute --> Fingerprinter
     Fingerprinter --> ConfidenceGate
 
-    ConfidenceGate -->|Yes: Confidence >= 0.85| AsyncWorker
+    ConfidenceGate -->|"Yes: Confidence >= 0.85"| AsyncWorker
     AsyncWorker --> KafkaProducer
-    KafkaProducer -->|Publish Key=userId| KafkaTopic
+    KafkaProducer -->|"Publish Key=userId"| KafkaTopic
     KafkaTopic --> ExpenseSvc
 
-    ConfidenceGate -->|No: Confidence < 0.85 or Irrelevant| ClassifyRoute
-    ClassifyRoute -->|HTTP 200: autoCreated flag & event payload| Client
+    ConfidenceGate -->|"No: Low Confidence or Irrelevant"| ClassifyRoute
+    ClassifyRoute -->|"HTTP 200: autoCreated flag & event payload"| Client
 
-    ClassifyRoute -.->|Distributed Span Propagation| Zipkin
-    ClassifyRoute -.->|Metrics Collection| Prometheus
-    EurekaClient <-->|Heartbeats & Lifecycle| Gateway
-    HealthEngine -.->|Liveness & Readiness Probes| Gateway
+    ClassifyRoute -.->|"Distributed Span Propagation"| Zipkin
+    ClassifyRoute -.->|"Metrics Collection"| Prometheus
+    EurekaClient <-->|"Heartbeats & Lifecycle"| Gateway
+    HealthEngine -.->|"Liveness & Readiness Probes"| Gateway
 ```
 
 ---

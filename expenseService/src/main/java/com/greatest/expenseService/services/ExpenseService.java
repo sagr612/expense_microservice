@@ -5,6 +5,8 @@ import com.greatest.expenseService.entities.CategoryType;
 import com.greatest.expenseService.entities.Expense;
 import com.greatest.expenseService.entities.ExpenseType;
 import com.greatest.expenseService.repository.ExpenseRepository;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,21 +37,10 @@ public class ExpenseService {
     private final ExpenseRepository expenseRepository;
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final Tracer tracer;
 
     private ExpenseDto convert(Expense e) {
-        return ExpenseDto.builder()
-                .externalId(e.getExternalId())
-                .userId(e.getUserId())
-                .currency(e.getCurrency())
-                .createdAt(e.getCreatedAt().toString())
-                .amount(e.getAmount())
-                .category(e.getCategory())
-                .type(e.getType())
-                .title(e.getTitle())
-                .note(e.getNote())
-                .version(e.getVersion())
-                .transactionDate(e.getTransactionDate())
-                .build();
+        return ExpenseDto.builder().externalId(e.getExternalId()).userId(e.getUserId()).currency(e.getCurrency()).createdAt(e.getCreatedAt().toString()).amount(e.getAmount()).category(e.getCategory()).type(e.getType()).title(e.getTitle()).note(e.getNote()).version(e.getVersion()).transactionDate(e.getTransactionDate()).build();
     }
 
     public Page<ExpenseDto> getExpenses(@NonNull String userId, Pageable pageable) {
@@ -70,51 +61,37 @@ public class ExpenseService {
 //                The client must reuse the same UUID only when retrying the same request.
 
         validateExpenseDto(req);
-        String externalId = Strings.isNotBlank(req.getExternalId())
-                ? req.getExternalId()
-                : UUID.randomUUID().toString();
+        String externalId = Strings.isNotBlank(req.getExternalId()) ? req.getExternalId() : UUID.randomUUID().toString();
 
         Optional<Expense> expense_exists = expenseRepository.findByUserIdAndExternalId(req.getUserId(), externalId);
         if (expense_exists.isPresent()) {
             return convert(expense_exists.get());
         }
 
-        Expense expense = Expense.builder()
-                .externalId(externalId)
-                .createdAt(Instant.now())
-                .amount(req.getAmount())
-                .currency(Strings.isNotBlank(req.getCurrency()) ? req.getCurrency() : "INR")
-                .userId(req.getUserId())
-                .category(req.getCategory())
-                .type(req.getType())
-                .title(req.getTitle())
-                .note(req.getNote())
-                .transactionDate(req.getTransactionDate())
-                .build();
+        Expense expense = Expense.builder().externalId(externalId).createdAt(Instant.now()).amount(req.getAmount()).currency(Strings.isNotBlank(req.getCurrency()) ? req.getCurrency() : "INR").userId(req.getUserId()).category(req.getCategory()).type(req.getType()).title(req.getTitle()).note(req.getNote()).transactionDate(req.getTransactionDate()).build();
 
         Expense saved = expenseRepository.save(expense);
         log.info("Expense created - id: {}", saved.getId());
         budgetAlertService.checkBudget(saved);
-        ExpenseCreatedEvent event = ExpenseCreatedEvent.builder()
-                .eventId(UUID.randomUUID().toString())
-                .userId(saved.getUserId())
-                .amount(saved.getAmount())
-                .category(saved.getCategory().name())
-                .externalId(saved.getExternalId())
-                .build();
+        ExpenseCreatedEvent event = ExpenseCreatedEvent.builder().eventId(UUID.randomUUID().toString()).userId(saved.getUserId()).amount(saved.getAmount()).category(saved.getCategory().name()).externalId(saved.getExternalId()).build();
+
+
+        Span currentSpan = tracer.currentSpan();
+        String traceparent = null;
+        if (currentSpan != null) {
+            traceparent = String.format("00-%s-%s-01", currentSpan.context().traceId(), currentSpan.context().spanId());
+        }
+
 
         OutboxEvent outboxEvent = OutboxEvent.builder()
 
-                .aggregateId(saved.getUserId())
-                .eventType("EXPENSE_CREATED")
-                .payload(toJson(event))
-                .published(false)
-                .build();
+                .aggregateId(saved.getUserId()).eventType("EXPENSE_CREATED").payload(toJson(event)).traceparent(traceparent).published(false).build();
         outboxRepository.save(outboxEvent);
 
         return convert(saved);
 
     }
+
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);
@@ -127,7 +104,6 @@ public class ExpenseService {
     @Transactional
     public ExpenseDto updateExpense(ExpenseDto req) {
         log.info("Updating expense - userId: {}, externalId: {}", req.getUserId(), req.getExternalId());
-
 //        validateExpenseDto(req);
         if (Strings.isBlank(req.getExternalId())) {
             throw new IllegalArgumentException("ExternalId is empty");
@@ -135,17 +111,8 @@ public class ExpenseService {
         if (Strings.isBlank(req.getUserId())) {
             throw new IllegalArgumentException("UserId is empty");
         }
-        Expense expense = expenseRepository
-                .findByUserIdAndExternalId(req.getUserId(), req.getExternalId())
-                .orElseThrow(() -> new IllegalArgumentException("Expense not found"));
-        boolean nothingToUpdate =
-                req.getAmount() == null &&
-                        Strings.isBlank(req.getCurrency()) &&
-                        req.getType() == null &&
-                        req.getCategory() == null &&
-                        Strings.isBlank(req.getTitle()) &&
-                        Strings.isBlank(req.getNote()) &&
-                        req.getTransactionDate() == null;
+        Expense expense = expenseRepository.findByUserIdAndExternalId(req.getUserId(), req.getExternalId()).orElseThrow(() -> new IllegalArgumentException("Expense not found"));
+        boolean nothingToUpdate = req.getAmount() == null && Strings.isBlank(req.getCurrency()) && req.getType() == null && req.getCategory() == null && Strings.isBlank(req.getTitle()) && Strings.isBlank(req.getNote()) && req.getTransactionDate() == null;
 
         if (nothingToUpdate) {
             throw new IllegalArgumentException("No fields provided to update");
@@ -184,11 +151,9 @@ public class ExpenseService {
     public void deleteExpenseByExternalId(@NonNull String userId, @NonNull String externalId) {
         log.info("Deleting expense - userId: {}, externalId: {}", userId, externalId);
 
-        Expense expense = expenseRepository
-                .findByUserIdAndExternalId(userId, externalId)
-                .orElseThrow(() -> new IllegalArgumentException("Expense not found"));
+        Expense expense = expenseRepository.findByUserIdAndExternalId(userId, externalId).orElseThrow(() -> new IllegalArgumentException("Expense not found"));
 
-         expenseRepository.delete(expense);
+        expenseRepository.delete(expense);
         log.info("Expense deleted - id: {}", expense.getId());
     }
 
@@ -200,14 +165,7 @@ public class ExpenseService {
         log.debug("Calculating summary for userId: {}", userId);
         SummaryProjection p = expenseRepository.getSummaryByUserId(userId);
 
-        return Summary.builder()
-                .income(p.getIncome())
-                .expenditure(p.getExpenditure())
-                .balance(p.getIncome().subtract(p.getExpenditure()))
-                .totalTransactions(p.getTotalTransactions())
-                .incomeTransactions(p.getIncomeTransactions())
-                .expenditureTransactions(p.getExpenditureTransactions())
-                .build();
+        return Summary.builder().income(p.getIncome()).expenditure(p.getExpenditure()).balance(p.getIncome().subtract(p.getExpenditure())).totalTransactions(p.getTotalTransactions()).incomeTransactions(p.getIncomeTransactions()).expenditureTransactions(p.getExpenditureTransactions()).build();
 
 
     }
@@ -244,56 +202,42 @@ public class ExpenseService {
     }
 
 
-    public CategoryAnalyticsResponse
-    getCategoryAnalytics(String userId) {
+    public CategoryAnalyticsResponse getCategoryAnalytics(String userId) {
 
-        List<CategoryAnalyticsDto> result =
-                expenseRepository.getCategoryAnalytics(
-                        userId,
-                        ExpenseType.EXPENSE
-                );
+        log.info("Calculating category analytics for userId: {}", userId);
+        List<CategoryAnalyticsDto> expenseList = expenseRepository.getCategoryAnalytics(userId, ExpenseType.EXPENSE);
+        List<CategoryAnalyticsDto> incomeList = expenseRepository.getCategoryAnalytics(userId, ExpenseType.INCOME);
 
-        Map<CategoryType, BigDecimal> analytics =
-                result.stream()
-                        .collect(Collectors.toMap(
-                                CategoryAnalyticsDto::getCategory,
-                                CategoryAnalyticsDto::getTotalAmount
-                        ));
-
-        return new CategoryAnalyticsResponse(
-                analytics
+        Map<CategoryType, BigDecimal> expenses = expenseList.stream().collect(
+                Collectors.toMap(CategoryAnalyticsDto::getCategory, CategoryAnalyticsDto::getTotalAmount)
         );
+
+        Map<CategoryType, BigDecimal> income = incomeList.stream().collect(
+                Collectors.toMap(CategoryAnalyticsDto::getCategory, CategoryAnalyticsDto::getTotalAmount)
+        );
+
+        return CategoryAnalyticsResponse.builder()
+                .expenses(expenses)
+                .income(income)
+                .build();
     }
 
     public List<MonthlyAnalyticsDto> getMonthlyAnalytics(String userId) {
-        return expenseRepository
-                .getMonthlyAnalytics(userId, ExpenseType.EXPENSE)
-                .stream()
-                .map(row -> new MonthlyAnalyticsDto(((Number)
-                        row[0]).intValue(), ((Number) row[1]).intValue(), (BigDecimal) row[2]))
-                .toList();
+        log.info("Calculating monthly analytics for userId: {}", userId);
+        return expenseRepository.getMonthlyAnalyticsCombined(userId).stream()
+                .map(row -> MonthlyAnalyticsDto.builder()
+                        .year(((Number) row[0]).intValue())
+                        .month(((Number) row[1]).intValue())
+                        .totalExpense((BigDecimal) row[2])
+                        .totalIncome((BigDecimal) row[3])
+                        .build()
+                ).toList();
     }
 
-    public Page<ExpenseDto> searchExpenses(
-            String userId,
-            CategoryType category,
-            ExpenseType type,
-            BigDecimal minAmount,
-            BigDecimal maxAmount,
-            LocalDate fromDate,
-            LocalDate toDate,
-            Pageable pageable) {
+    public Page<ExpenseDto> searchExpenses(String userId, CategoryType category, ExpenseType type, BigDecimal minAmount, BigDecimal maxAmount, LocalDate fromDate, LocalDate toDate, Pageable pageable) {
 
-        Specification<Expense> spec = ExpenseSpecification.hasUserId(userId)
-                .and(ExpenseSpecification.hasCategory(category))
-                .and(ExpenseSpecification.hasType(type))
-                .and(ExpenseSpecification.minAmount(minAmount))
-                .and(ExpenseSpecification.maxAmount(maxAmount))
-                .and(ExpenseSpecification.fromDate(fromDate))
-                .and(ExpenseSpecification.toDate(toDate));
+        Specification<Expense> spec = ExpenseSpecification.hasUserId(userId).and(ExpenseSpecification.hasCategory(category)).and(ExpenseSpecification.hasType(type)).and(ExpenseSpecification.minAmount(minAmount)).and(ExpenseSpecification.maxAmount(maxAmount)).and(ExpenseSpecification.fromDate(fromDate)).and(ExpenseSpecification.toDate(toDate));
 
-        return expenseRepository
-                .findAll(spec, pageable)
-                .map(this::convert);
+        return expenseRepository.findAll(spec, pageable).map(this::convert);
     }
 }

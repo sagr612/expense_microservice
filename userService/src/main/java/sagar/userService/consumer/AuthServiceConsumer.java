@@ -38,7 +38,7 @@ public class AuthServiceConsumer {
 
         int claimed = processedEventRepository.insertIfAbsent(eventId, consumerGroup, Instant.now());
         if (claimed == 0) {
-            log.debug("Skipping already-processed budget alert event {}", eventId);
+            log.debug("Skipping already-processed user creation event {}", eventId);
             return;
         }
         userService.upsertFromEvent(eventData);

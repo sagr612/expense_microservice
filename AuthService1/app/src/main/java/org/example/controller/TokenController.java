@@ -36,16 +36,18 @@ public class TokenController {
     private final JwtService jwtService;
 
 
-
     @PostMapping("/login")
     public ResponseEntity<JwtResponseDTO> authenticateAndGetToken(@Valid @RequestBody AuthRequestDTO authRequestDTO) {
+        log.info("Login attempt for username: {}", authRequestDTO.getUsername());
         Authentication authentication = authenticationManager.authenticate(new UsernamePasswordAuthenticationToken(authRequestDTO.getUsername(), authRequestDTO.getPassword()));
         if (!authentication.isAuthenticated()) {
+            log.warn("Authentication failed for username: {}", authRequestDTO.getUsername());
             throw new InvalidCredentialsException("Authentication failed");
         }
 
         RefreshTokenResponse refreshToken = refreshTokenService.createRefreshToken(authRequestDTO.getUsername());
         UserInfo user = userDetailsService.checkIfUserAlreadyExist(authRequestDTO.getUsername());
+        log.info("User successfully authenticated. userId: {}, username: {}", user.getUserId(), user.getUsername());
         return ResponseEntity.ok(JwtResponseDTO.builder()
                 .accessToken(jwtService.generateToken(authRequestDTO.getUsername(), user.getUserId(), user.getRoles().stream().map(UserRole::name).toList()))
                 .token(refreshToken.getToken())
@@ -54,45 +56,44 @@ public class TokenController {
 
     @PostMapping("/refreshToken")
     public ResponseEntity<JwtResponseDTO> refreshToken(@Valid @RequestBody RefreshTokenRequestDTO req) {
-
-         JwtResponseDTO response= refreshTokenService.rotateRefreshToken(req.getToken());
-
+        log.debug("Refresh token rotation requested");
+        JwtResponseDTO response = refreshTokenService.rotateRefreshToken(req.getToken());
+        log.info("Refresh token successfully rotated");
         return ResponseEntity.ok(response);
     }
 
     @PostMapping("/change/passwords")
     public ResponseEntity<JwtResponseDTO> changePassword(@Valid @RequestBody PasswordDto passwordDto) {
+        log.info("Password change requested");
         JwtResponseDTO response = userDetailsService.changePassword(passwordDto);
-
+        log.info("Password change completed successfully");
         return ResponseEntity.ok(response);
-
     }
 
     @PostMapping("/change/username")
     public ResponseEntity<JwtResponseDTO> changeUsername(Authentication authentication, @Valid @RequestBody UpdateUsernameReq usernameReq) {
-        String userId=authentication.getName();
-
+        String userId = authentication.getName();
+        log.info("Username change requested for userId: {} to newUsername: {}", userId, usernameReq.getNewUsername());
         JwtResponseDTO response = userDetailsService.changeUsername(usernameReq.getNewUsername(), userId);
-
+        log.info("Username successfully changed for userId: {}", userId);
         return ResponseEntity.ok(response);
     }
 
 
     @PostMapping("/forgot-password")
     public ResponseEntity<String> forgotPassword(@RequestBody @Valid ForgotPasswordRequest request) {
+        log.info("Forgot password requested for email: {}", request.email());
         userDetailsService.forgotPassword(request.email());
         return ResponseEntity.ok("Password reset email sent");
     }
 
     @PostMapping("/reset-password")
     public ResponseEntity<String> resetPassword(@RequestBody @Valid ResetPasswordRequest request) {
-
+        log.info("Password reset requested with token");
         userDetailsService.resetPassword(request.token(), request.newPassword());
-
+        log.info("Password reset completed successfully");
         return ResponseEntity.ok("Password updated successfully");
     }
-
-
 
 
 }

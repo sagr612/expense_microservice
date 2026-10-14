@@ -262,8 +262,10 @@ class ExpenseControllerTest {
 
     @Test
     void shouldReturnCategoryAnalytics() throws Exception {
-        CategoryAnalyticsResponse response =
-                new CategoryAnalyticsResponse(Map.of(CategoryType.FOOD, BigDecimal.valueOf(500)));
+        CategoryAnalyticsResponse response = CategoryAnalyticsResponse.builder()
+                .expenses(Map.of(CategoryType.FOOD, BigDecimal.valueOf(500)))
+                .income(Map.of())
+                .build();
         when(expenseService.getCategoryAnalytics("user-1")).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/expenses/analytics/category")
@@ -271,14 +273,18 @@ class ExpenseControllerTest {
 
                         .header("X-User-Id", "user-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.analytics.FOOD").value(500));
+                .andExpect(jsonPath("$.expenses.FOOD").value(500));
     }
 
     @Test
     void shouldReturnMonthlyAnalytics() throws Exception {
         when(expenseService.getMonthlyAnalytics("user-1"))
-                .thenReturn(List.of(new MonthlyAnalyticsDto(2026, 6, BigDecimal.valueOf(750))));
-
+                .thenReturn(List.of(MonthlyAnalyticsDto.builder()
+                        .year(2026)
+                        .month(6)
+                        .totalExpense(BigDecimal.valueOf(750))
+                        .totalIncome(BigDecimal.ZERO)
+                        .build()));
         mockMvc.perform(get("/api/v1/expenses/analytics/monthly")
                         .with(authentication(userAuth("user-1")))
                         .header("X-User-Id", "user-1"))

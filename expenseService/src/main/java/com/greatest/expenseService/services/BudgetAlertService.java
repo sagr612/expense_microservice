@@ -9,6 +9,8 @@ import com.greatest.expenseService.entities.OutboxEvent;
 import com.greatest.expenseService.repository.BudgetRepository;
 import com.greatest.expenseService.repository.ExpenseRepository;
 import com.greatest.expenseService.repository.OutboxRepository;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,11 +27,10 @@ import java.util.UUID;
 public class BudgetAlertService {
 
     private final BudgetRepository budgetRepository;
-
     private final ExpenseRepository expenseRepository;
-
     private final OutboxRepository outboxRepository;
     private final ObjectMapper objectMapper;
+    private final Tracer tracer;
 
     @Transactional
     public void checkBudget(Expense expense) {
@@ -86,11 +87,19 @@ public class BudgetAlertService {
                 .percentageUsed(percentage)
                 .alertType(threshold + "_PERCENT").build();
 
+        Span currentSpan = tracer.currentSpan();
+        String traceparent = null;
+        if (currentSpan != null) {
+            traceparent = String.format("00-%s-%s-01",
+                    currentSpan.context().traceId(),
+                    currentSpan.context().spanId());
+        }
 
         outboxRepository.save(OutboxEvent.builder()
                 .aggregateId(expense.getUserId())
                 .eventType("BUDGET_ALERT")
                 .payload(toJson(event))
+                .traceparent(traceparent)
                 .published(false)
                 .build());
 
@@ -100,6 +109,7 @@ public class BudgetAlertService {
 
         log.info("Budget alert triggered {}% for user {}", threshold, expense.getUserId());
     }
+
     private String toJson(Object obj) {
         try {
             return objectMapper.writeValueAsString(obj);

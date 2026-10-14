@@ -10,7 +10,7 @@ from typing import Literal, get_args
 
 logger = logging.getLogger(__name__)
 
-GEMINI_TIMEOUT_MS = int(os.getenv("GEMINI_TIMEOUT_MS", "5000"))
+GEMINI_TIMEOUT_MS = int(os.getenv("GEMINI_TIMEOUT_MS", "10000"))
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 LLM_FAILURES = Counter("ai_sms_llm_failures_total", "Gemini classification failures", ["reason"])

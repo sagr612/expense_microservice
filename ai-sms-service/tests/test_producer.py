@@ -1,5 +1,5 @@
 # tests/test_producer.py
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, ANY
 from kafka.errors import KafkaTimeoutError
 from app.kafka_client.producer import publish_expense_event
 
@@ -41,6 +41,7 @@ def test_publish_expense_event_returns_true_on_success(mock_get_producer):
         "expense.create.request",
         key="user-42",
         value=event,
+        headers =ANY
     )
     # future.get should have been called with a positive timeout
     mock_producer.send.return_value.get.assert_called_once()
