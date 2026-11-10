@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-sms-service-deployment
+  namespace: expense-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-sms-service
+  template:
+    metadata:
+      labels:
+        app: ai-sms-service
+    spec:
+      containers:
+        - name: ai-sms-service
+          image: expensetracker-ai-sms-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: microservice-config
+            - secretRef:
+                name: microservice-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "150m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-sms-service
+  namespace: expense-tracker
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-sms-service
+  ports:
+    - port: 8000
+      targetPort: 8000

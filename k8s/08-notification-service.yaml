@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service-deployment
+  namespace: expense-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+        - name: notification-service
+          image: expensetracker-notification-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 9500
+          envFrom:
+            - configMapRef:
+                name: microservice-config
+            - secretRef:
+                name: microservice-secrets
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "150m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 9500
+            initialDelaySeconds: 90
+            periodSeconds: 15
+            failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: expense-tracker
+spec:
+  type: ClusterIP
+  selector:
+    app: notification-service
+  ports:
+    - port: 9500
+      targetPort: 9500

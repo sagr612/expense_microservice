@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: microservice-config
+  namespace: expense-tracker
+data:
+  SPRING_PROFILES_ACTIVE: "prod"
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  POSTGRES_USER: "postgres"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  EUREKA_URI: "http://service-discovery:8761/eureka/"

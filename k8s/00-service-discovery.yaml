@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-discovery-deployment
+  namespace: expense-tracker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-discovery
+  template:
+    metadata:
+      labels:
+        app: service-discovery
+    spec:
+      containers:
+        - name: service-discovery
+          image: expensetracker-service-discovery:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8761
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: 8761
+            initialDelaySeconds: 30
+            periodSeconds: 15
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-discovery
+  namespace: expense-tracker
+spec:
+  type: ClusterIP
+  selector:
+    app: service-discovery
+  ports:
+    - port: 8761
+      targetPort: 8761
